@@ -14,11 +14,10 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import {
   NodeOAuthClientProvider,
   setupOAuthCallbackServer,
-  connectToRemoteServer,
-  mcpProxy,
   parseCommandLineArgs,
   setupSignalHandlers,
-} from './shared'
+} from './shared.js'
+import {connectToRemoteServer, mcpProxy} from "../lib/utils.js";
 
 /**
  * Main function to run the proxy
