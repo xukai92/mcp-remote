@@ -18,6 +18,7 @@
     }
   },
   "scripts": {
+    "dev": "tsup --watch",
     "build": "tsup",
     "check": "prettier --check . && tsc"
   },
