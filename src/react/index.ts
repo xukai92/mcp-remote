@@ -1,9 +1,9 @@
-import { Tool, OAuthMetadata, JSONRPCMessage, OAuthClientInformation, OAuthTokens } from '@modelcontextprotocol/sdk/types.js'
-import { useCallback, useEffect, useState, useRef } from 'react'
+import { CallToolResultSchema, JSONRPCMessage, ListToolsResultSchema, Tool } from '@modelcontextprotocol/sdk/types.js'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js'
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
-import { ListToolsResultSchema } from '@modelcontextprotocol/sdk/types.js'
-import { discoverOAuthMetadata, startAuthorization, exchangeAuthorization } from '@modelcontextprotocol/sdk/client/auth.js'
+import { discoverOAuthMetadata, exchangeAuthorization, startAuthorization } from '@modelcontextprotocol/sdk/client/auth.js'
+import { OAuthClientInformation, OAuthMetadata, OAuthTokens } from '@modelcontextprotocol/sdk/shared/auth.js'
 
 export type UseMcpOptions = {
   /** The /sse URL of your remote MCP server */
@@ -27,8 +27,6 @@ export type UseMcpOptions = {
   autoRetry?: boolean | number
   /** Auto reconnect if connection is lost, with delay in ms (default: 3000) */
   autoReconnect?: boolean | number
-  /** OAuth authentication mode (default: 'popup-with-redirect-fallback') */
-  authMode?: 'popup-only' | 'redirect-only' | 'popup-with-redirect-fallback'
   /** Popup window features (dimensions and behavior) for OAuth */
   popupFeatures?: string
 }
@@ -39,15 +37,20 @@ export type UseMcpResult = {
    * The current state of the MCP connection. This will be one of:
    * - 'discovering': Finding out whether there is in fact a server at that URL, and what its capabilities are
    * - 'authenticating': The server has indicated we must authenticate, so we can't proceed until that's complete
-   * - 'popup-blocked': The auth popup was blocked by the browser, manual authentication is needed
    * - 'connecting': The connection to the MCP server is being established. This happens before we know whether we need to authenticate or not, and then again once we have credentials
    * - 'loading': We're connected to the MCP server, and now we're loading its resources/prompts/tools
    * - 'ready': The MCP server is connected and ready to be used
    * - 'failed': The connection to the MCP server failed
    * */
-  state: 'discovering' | 'authenticating' | 'popup-blocked' | 'connecting' | 'loading' | 'ready' | 'failed'
+  state: 'discovering' | 'authenticating' | 'connecting' | 'loading' | 'ready' | 'failed'
   /** If the state is 'failed', this will be the error message */
   error?: string
+  /**
+   * If authorization was blocked, this will contain the URL to authorize manually
+   * The app can render this as a link with target="_blank" so the user can complete
+   * authorization without leaving the app
+   */
+  authUrl?: string
   /** All internal log messages */
   log: { level: 'debug' | 'info' | 'warn' | 'error'; message: string }[]
   /** Call a tool on the MCP server */
@@ -57,12 +60,17 @@ export type UseMcpResult = {
   /** Manually disconnect from the MCP server */
   disconnect: () => void
   /**
-   * Manually trigger authentication (useful when popup is blocked)
+   * Manually trigger authentication
    * @returns Auth URL that can be used to manually open a new window
    */
   authenticate: () => Promise<string | undefined>
-  /** Authentication URL to manually open if popup is blocked */
-  authUrl?: string
+}
+
+type StoredState = {
+  authorizationUrl: string
+  metadata: OAuthMetadata
+  serverUrlHash: string
+  expiry: number
 }
 
 /**
@@ -84,7 +92,7 @@ class BrowserOAuthClientProvider {
       callbackUrl?: string
     } = {},
   ) {
-    this.storageKeyPrefix = options.storageKeyPrefix || 'mcp_auth'
+    this.storageKeyPrefix = options.storageKeyPrefix || 'mcp:auth'
     this.serverUrlHash = this.hashString(serverUrl)
     this.clientName = options.clientName || 'MCP Browser Client'
     this.clientUri = options.clientUri || window.location.origin
@@ -157,89 +165,63 @@ class BrowserOAuthClientProvider {
 
   async redirectToAuthorization(
     authorizationUrl: URL,
+    metadata: OAuthMetadata,
     options?: {
-      mode?: 'popup-only' | 'redirect-only' | 'popup-with-redirect-fallback'
       popupFeatures?: string
     },
   ): Promise<{ success: boolean; popupBlocked?: boolean; url: string }> {
     // Store the auth state for the popup flow
-    const stateKey = this.getKey('auth_state')
     const state = Math.random().toString(36).substring(2)
-    localStorage.setItem(stateKey, state)
+    const stateKey = `${this.storageKeyPrefix}:state_${state}`
+    localStorage.setItem(
+      stateKey,
+      JSON.stringify({
+        authorizationUrl: authorizationUrl.toString(),
+        metadata,
+        serverUrlHash: this.serverUrlHash,
+        expiry: +new Date() + 1000 * 60 * 5 /* 5 minutes */,
+      } as StoredState),
+    )
     authorizationUrl.searchParams.set('state', state)
 
     const authUrl = authorizationUrl.toString()
-    const mode = options?.mode || 'popup-only'
     const popupFeatures = options?.popupFeatures || 'width=600,height=700,resizable=yes,scrollbars=yes'
 
     // Store the auth URL in case we need it for manual authentication
     localStorage.setItem(this.getKey('auth_url'), authUrl)
-    console.log({ mode })
 
-    if (mode === 'redirect-only') {
-      // Redirect in the current window
-      window.location.href = authUrl
-      return { success: true, url: authUrl }
-    }
+    try {
+      // Open the authorization URL in a popup window
+      const popup = window.open(authUrl, 'mcp_auth', popupFeatures)
 
-    if (mode === 'popup-only' || mode === 'popup-with-redirect-fallback') {
-      try {
-        // Open the authorization URL in a popup window
-        const popup = window.open(authUrl, 'mcp_auth', popupFeatures)
-        console.log({ popup })
-
-        // Check if popup was blocked or closed immediately
-        if (!popup || popup.closed || popup.closed === undefined) {
-          if (mode === 'popup-with-redirect-fallback') {
-            // Fall back to redirect
-            console.warn('Popup blocked. Redirecting in the same window...')
-            window.location.href = authUrl
-            return { success: true, popupBlocked: true, url: authUrl }
-          } else {
-            // Popup-only mode, return error
-            console.warn('Popup blocked and redirect fallback disabled')
-            return { success: false, popupBlocked: true, url: authUrl }
-          }
-        }
-
-        // Try to access the popup to confirm it's not blocked
-        try {
-          // Just accessing any property will throw if popup is blocked
-          const popupLocation = popup.location
-          // If we can read location.href, the popup is definitely working
-          if (popupLocation.href) {
-            // Successfully opened popup
-            return { success: true, url: authUrl }
-          }
-        } catch (e) {
-          // Access to the popup was denied, indicating it's blocked
-          if (mode === 'popup-with-redirect-fallback') {
-            console.warn('Popup blocked (security exception). Redirecting in the same window...')
-            window.location.href = authUrl
-            return { success: true, popupBlocked: true, url: authUrl }
-          } else {
-            console.warn('Popup blocked (security exception) and redirect fallback disabled')
-            return { success: false, popupBlocked: true, url: authUrl }
-          }
-        }
-
-        // If we got here, popup is working
-        return { success: true, url: authUrl }
-      } catch (e) {
-        // Error opening popup
-        if (mode === 'popup-with-redirect-fallback') {
-          console.warn('Error opening popup:', e, 'Falling back to redirect')
-          window.location.href = authUrl
-          return { success: true, popupBlocked: true, url: authUrl }
-        } else {
-          console.warn('Error opening popup:', e, 'and redirect fallback disabled')
-          return { success: false, popupBlocked: true, url: authUrl }
-        }
+      // Check if popup was blocked or closed immediately
+      if (!popup || popup.closed || popup.closed === undefined) {
+        console.warn('Popup blocked. Returning error.')
+        return { success: false, popupBlocked: true, url: authUrl }
       }
-    }
 
-    // This shouldn't happen given the enum constraint, but TypeScript doesn't know that
-    throw new Error(`Invalid auth mode: ${mode}`)
+      // Try to access the popup to confirm it's not blocked
+      try {
+        // Just accessing any property will throw if popup is blocked
+        const popupLocation = popup.location
+        // If we can read location.href, the popup is definitely working
+        if (popupLocation.href) {
+          // Successfully opened popup
+          return { success: true, url: authUrl }
+        }
+      } catch (e) {
+        // Access to the popup was denied, indicating it's blocked
+        console.warn('Popup blocked (security exception).')
+        return { success: false, popupBlocked: true, url: authUrl }
+      }
+
+      // If we got here, popup is working
+      return { success: true, url: authUrl }
+    } catch (e) {
+      // Error opening popup
+      console.warn('Error opening popup:', e)
+      return { success: false, popupBlocked: true, url: authUrl }
+    }
   }
 
   async saveCodeVerifier(codeVerifier: string): Promise<void> {
@@ -285,7 +267,7 @@ export function useMcp(options: UseMcpOptions): UseMcpResult {
     clientName = 'MCP React Client',
     clientUri = window.location.origin,
     callbackUrl = new URL('/oauth/callback', window.location.origin).toString(),
-    storageKeyPrefix = 'mcp_auth',
+    storageKeyPrefix = 'mcp:auth',
     clientConfig = {
       name: 'mcp-react-client',
       version: '0.1.0',
@@ -293,14 +275,12 @@ export function useMcp(options: UseMcpOptions): UseMcpResult {
     debug = false,
     autoRetry = false,
     autoReconnect = 3000,
-    authMode = 'popup-only',
     popupFeatures = 'width=600,height=700,resizable=yes,scrollbars=yes',
   } = options
 
   // Add to log
   const addLog = useCallback(
     (level: 'debug' | 'info' | 'warn' | 'error', message: string) => {
-      console.log(message)
       if (level === 'debug' && !debug) return
       setLog((prevLog) => [...prevLog, { level, message }])
     },
@@ -315,10 +295,14 @@ export function useMcp(options: UseMcpOptions): UseMcpResult {
       }
 
       try {
-        const result = await clientRef.current.request({
-          method: 'tools/call',
-          params: { name, arguments: args },
-        })
+        console.log('CALLING TOOL')
+        const result = await clientRef.current.request(
+          {
+            method: 'tools/call',
+            params: { name, arguments: args },
+          },
+          CallToolResultSchema,
+        )
         return result
       } catch (err) {
         addLog('error', `Error calling tool ${name}: ${err instanceof Error ? err.message : String(err)}`)
@@ -444,7 +428,7 @@ export function useMcp(options: UseMcpOptions): UseMcpResult {
       // Connect transport
       try {
         addLog('info', 'Starting transport...')
-        await transportRef.current.start()
+        // await transportRef.current.start()
       } catch (err) {
         addLog('error', `Transport start error: ${err instanceof Error ? err.message : String(err)}`)
 
@@ -596,7 +580,11 @@ export function useMcp(options: UseMcpOptions): UseMcpResult {
         if (event.data && event.data.type === 'mcp_auth_callback' && event.data.code) {
           window.removeEventListener('message', messageHandler)
           clearTimeout(timeoutId)
-          resolve(event.data.code)
+
+          // TODO: not this, obviously
+          // reload window, we should find the token in local storage
+          window.location.reload()
+          // resolve(event.data.code)
         }
       }
 
@@ -605,24 +593,15 @@ export function useMcp(options: UseMcpOptions): UseMcpResult {
 
     // Redirect to authorization
     addLog('info', 'Opening authorization window...')
-    const redirectResult = await authProviderRef.current.redirectToAuthorization(authUrlRef.current, {
-      mode: authMode,
-      popupFeatures,
-    })
+    const redirectResult = await authProviderRef.current.redirectToAuthorization(authUrlRef.current, metadataRef.current, { popupFeatures })
 
     if (!redirectResult.success) {
-      // Popup was blocked and we're in popup-only mode
-      setState('popup-blocked')
-      setError('Authentication popup was blocked by the browser')
+      // Popup was blocked
+      setState('failed')
+      setError('Authentication popup was blocked by the browser. Please click the link to authenticate in a new window.')
+      setAuthUrl(redirectResult.url)
       addLog('warn', 'Authentication popup was blocked. User needs to manually authorize.')
       throw new Error('Authentication popup blocked')
-    }
-
-    if (redirectResult.popupBlocked && authMode === 'popup-with-redirect-fallback') {
-      // The popup was blocked but we've fallen back to redirect
-      // No need to wait for the auth promise since we're redirecting
-      addLog('info', 'Popup blocked, falling back to redirect...')
-      return 'redirect-in-progress'
     }
 
     // Wait for auth to complete
@@ -631,7 +610,7 @@ export function useMcp(options: UseMcpOptions): UseMcpResult {
     addLog('info', 'Authorization code received')
 
     return code
-  }, [url, addLog, authMode, popupFeatures, startAuthFlow])
+  }, [url, addLog, popupFeatures, startAuthFlow])
 
   // Handle auth completion - this is called when we receive a message from the popup
   const handleAuthCompletion = useCallback(
@@ -649,11 +628,6 @@ export function useMcp(options: UseMcpOptions): UseMcpResult {
         authUrlRef.current = undefined
         setAuthUrl(undefined)
 
-        // Reset popup blocked state if we were in that state
-        if (state === 'popup-blocked') {
-          setState('authenticating')
-        }
-
         // Reconnect with the new auth token
         await disconnect()
         connect()
@@ -663,7 +637,7 @@ export function useMcp(options: UseMcpOptions): UseMcpResult {
         setError(`Authentication failed: ${err instanceof Error ? err.message : String(err)}`)
       }
     },
-    [addLog, disconnect, connect, state],
+    [addLog, disconnect, connect],
   )
 
   // Retry connection
@@ -741,7 +715,14 @@ export function useMcp(options: UseMcpOptions): UseMcpResult {
  * Once it's updated LocalStorage with the auth token, it will post a message back to the original
  * window to inform any running `useMcp` hooks that the auth flow is complete.
  */
-export async function onMcpAuthorization(query: Record<string, string>) {
+export async function onMcpAuthorization(
+  query: Record<string, string>,
+  {
+    storageKeyPrefix = 'mcp:auth',
+  }: {
+    storageKeyPrefix?: string
+  } = {},
+) {
   try {
     // Extract the authorization code and state
     const code = query.code
@@ -756,20 +737,23 @@ export async function onMcpAuthorization(query: Record<string, string>) {
     }
 
     // Find the matching auth state in localStorage
-    const storageKeys = Object.keys(localStorage).filter((key) => key.includes('_auth_state') && localStorage.getItem(key) === state)
+    // const storageKeys = Object.keys(localStorage).filter((key) => key.includes('_auth_state') && localStorage.getItem(key) === state)
 
-    if (storageKeys.length === 0) {
+    const stateKey = `${storageKeyPrefix}:state_${state}`
+    const storedState = localStorage.getItem(stateKey)
+    console.log({ stateKey, storedState })
+    if (!storedState) {
       throw new Error('No matching auth state found in storage')
     }
-
-    const storageKey = storageKeys[0]
-    const keyParts = storageKey.split('_')
-    const serverUrlHash = keyParts[1]
-    const storageKeyPrefix = keyParts[0]
+    const { authorizationUrl, serverUrlHash, metadata, expiry } = JSON.parse(storedState)
+    if (expiry < Date.now()) {
+      throw new Error('Auth state has expired')
+    }
 
     // Find all related auth data with the same prefix and server hash
     const clientInfoKey = `${storageKeyPrefix}_${serverUrlHash}_client_info`
     const codeVerifierKey = `${storageKeyPrefix}_${serverUrlHash}_code_verifier`
+    console.log({ authorizationUrl, clientInfoKey, codeVerifierKey })
 
     const clientInfoStr = localStorage.getItem(clientInfoKey)
     const codeVerifier = localStorage.getItem(codeVerifierKey)
@@ -785,29 +769,7 @@ export async function onMcpAuthorization(query: Record<string, string>) {
     // Parse client info
     const clientInfo = JSON.parse(clientInfoStr) as OAuthClientInformation
 
-    // Find the server URL from other keys in localStorage
-    const serverUrlKeys = Object.keys(localStorage).filter(
-      (key) => key.startsWith(`${storageKeyPrefix}_server_`) && key.includes(serverUrlHash),
-    )
-
-    let serverUrl: string
-    if (serverUrlKeys.length > 0) {
-      serverUrl = localStorage.getItem(serverUrlKeys[0]) || ''
-    } else {
-      // If we can't find the server URL, try to construct it from the current URL
-      // This is a fallback and may not always work
-      const currentUrl = new URL(window.location.href)
-      serverUrl = `${currentUrl.protocol}//${currentUrl.host}`
-    }
-
-    if (!serverUrl) {
-      throw new Error('Could not determine server URL')
-    }
-
-    // Exchange the code for tokens
-    const metadata = await discoverOAuthMetadata(serverUrl)
-
-    const tokens = await exchangeAuthorization(serverUrl, {
+    const tokens = await exchangeAuthorization(new URL('/', authorizationUrl), {
       metadata,
       clientInformation: clientInfo,
       authorizationCode: code,
@@ -816,6 +778,7 @@ export async function onMcpAuthorization(query: Record<string, string>) {
 
     // Save the tokens
     const tokensKey = `${storageKeyPrefix}_${serverUrlHash}_tokens`
+    console.log({ tokensKey, tokens })
     localStorage.setItem(tokensKey, JSON.stringify(tokens))
 
     // Post message back to the parent window
@@ -823,7 +786,6 @@ export async function onMcpAuthorization(query: Record<string, string>) {
       window.opener.postMessage(
         {
           type: 'mcp_auth_callback',
-          code,
         },
         window.location.origin,
       )
