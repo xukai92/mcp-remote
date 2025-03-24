@@ -63,6 +63,28 @@ async function runProxy(serverUrl: string, callbackPort: number) {
     setupSignalHandlers(cleanup)
   } catch (error) {
     console.error('Fatal error:', error)
+    if (error instanceof Error && error.message.includes('self-signed certificate in certificate chain')) {
+      console.error(`You may be behind a VPN!
+
+If you are behind a VPN, you can try setting the NODE_EXTRA_CA_CERTS environment variable to point
+to the CA certificate file. If using claude_desktop_config.json, this might look like:
+
+{
+  "mcpServers": {
+    "\${mcpServerName}": {
+      "command": "npx",
+      "args": [
+        "mcp-remote",
+        "https://remote.mcp.server/sse"
+      ],
+      "env": {
+        "NODE_EXTRA_CA_CERTS": "\${your CA certificate file path}.pem"
+      }
+    }
+  }
+}
+        `)
+    }
     server.close()
     process.exit(1)
   }
