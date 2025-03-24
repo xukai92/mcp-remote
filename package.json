@@ -32,5 +32,21 @@
     "tsup": "^8.4.0",
     "tsx": "^4.19.3",
     "typescript": "^5.8.2"
+  },
+  "tsup": {
+    "entry": [
+      "src/cli/client.ts",
+      "src/cli/proxy.ts",
+      "src/react/index.ts"
+    ],
+    "format": [
+      "esm"
+    ],
+    "dts": true,
+    "clean": true,
+    "outDir": "dist",
+    "external": [
+      "react"
+    ]
   }
 }
