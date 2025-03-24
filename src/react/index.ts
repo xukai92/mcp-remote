@@ -534,7 +534,7 @@ export function useMcp(options: UseMcpOptions): UseMcpResult {
             metadataRef.current = await discoverOAuthMetadata(url)
             addLog('debug', `OAuth metadata: ${metadataRef.current ? 'Found' : 'Not available'}`)
           }
-          
+
           // If metadata is found, start auth flow
           if (metadataRef.current) {
             setState('authenticating')
@@ -599,7 +599,7 @@ export function useMcp(options: UseMcpOptions): UseMcpResult {
         }
       } catch (connectErr) {
         addLog('error', `Client connect error: ${connectErr instanceof Error ? connectErr.message : String(connectErr)}`)
-        
+
         if (connectErr instanceof Error && connectErr.message.includes('Unauthorized')) {
           // Only discover OAuth and authenticate if we get a 401
           await discoverOAuthAndAuthenticate(connectErr)
