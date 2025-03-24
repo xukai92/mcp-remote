@@ -471,13 +471,6 @@ export function useMcp(options: UseMcpOptions): UseMcpResult {
         })
       }
 
-      // Discover OAuth metadata if not already discovered
-      if (!metadataRef.current) {
-        addLog('info', 'Discovering OAuth metadata...')
-        metadataRef.current = await discoverOAuthMetadata(url)
-        addLog('debug', `OAuth metadata: ${metadataRef.current ? 'Found' : 'Not available'}`)
-      }
-
       // Create MCP client
       clientRef.current = new Client(
         {
@@ -491,10 +484,7 @@ export function useMcp(options: UseMcpOptions): UseMcpResult {
         },
       )
 
-      // Set up auth flow - check if we have tokens
-      const tokens = await authProviderRef.current.tokens()
-
-      // Create SSE transport
+      // Create SSE transport - try connecting without auth first
       setState('connecting')
       addLog('info', 'Creating transport...')
 
@@ -514,13 +504,8 @@ export function useMcp(options: UseMcpOptions): UseMcpResult {
         addLog('error', `Transport error: ${err.message}`)
 
         if (err.message.includes('Unauthorized')) {
-          setState('authenticating')
-          handleAuthentication().catch((authErr) => {
-            addLog('error', `Authentication error: ${authErr.message}`)
-            setState('failed')
-            setError(`Authentication failed: ${authErr.message}`)
-            connectingRef.current = false
-          })
+          // Only discover OAuth metadata and authenticate if we get a 401
+          discoverOAuthAndAuthenticate(err)
         } else {
           setState('failed')
           setError(`Connection error: ${err.message}`)
@@ -540,7 +525,38 @@ export function useMcp(options: UseMcpOptions): UseMcpResult {
         }
       }
 
-      // Connect transport
+      // Helper function to handle OAuth discovery and authentication
+      const discoverOAuthAndAuthenticate = async (error: Error) => {
+        try {
+          // Discover OAuth metadata now that we know we need it
+          if (!metadataRef.current) {
+            addLog('info', 'Discovering OAuth metadata...')
+            metadataRef.current = await discoverOAuthMetadata(url)
+            addLog('debug', `OAuth metadata: ${metadataRef.current ? 'Found' : 'Not available'}`)
+          }
+          
+          // If metadata is found, start auth flow
+          if (metadataRef.current) {
+            setState('authenticating')
+            // Start authentication process
+            await handleAuthentication()
+            // After successful auth, retry connection
+            return connect()
+          } else {
+            // No OAuth metadata available
+            setState('failed')
+            setError(`Authentication required but no OAuth metadata found: ${error.message}`)
+            connectingRef.current = false
+          }
+        } catch (oauthErr) {
+          addLog('error', `OAuth discovery error: ${oauthErr instanceof Error ? oauthErr.message : String(oauthErr)}`)
+          setState('failed')
+          setError(`Authentication setup failed: ${oauthErr instanceof Error ? oauthErr.message : String(oauthErr)}`)
+          connectingRef.current = false
+        }
+      }
+
+      // Try connecting transport first without OAuth discovery
       try {
         addLog('info', 'Starting transport...')
         // await transportRef.current.start()
@@ -548,11 +564,8 @@ export function useMcp(options: UseMcpOptions): UseMcpResult {
         addLog('error', `Transport start error: ${err instanceof Error ? err.message : String(err)}`)
 
         if (err instanceof Error && err.message.includes('Unauthorized')) {
-          setState('authenticating')
-          // Start authentication process
-          await handleAuthentication()
-          // After successful auth, retry connection
-          return connect()
+          // Only discover OAuth and authenticate if we get a 401
+          await discoverOAuthAndAuthenticate(err)
         } else {
           setState('failed')
           setError(`Connection error: ${err instanceof Error ? err.message : String(err)}`)
@@ -586,9 +599,15 @@ export function useMcp(options: UseMcpOptions): UseMcpResult {
         }
       } catch (connectErr) {
         addLog('error', `Client connect error: ${connectErr instanceof Error ? connectErr.message : String(connectErr)}`)
-        setState('failed')
-        setError(`Connection error: ${connectErr instanceof Error ? connectErr.message : String(connectErr)}`)
-        connectingRef.current = false
+        
+        if (connectErr instanceof Error && connectErr.message.includes('Unauthorized')) {
+          // Only discover OAuth and authenticate if we get a 401
+          await discoverOAuthAndAuthenticate(connectErr)
+        } else {
+          setState('failed')
+          setError(`Connection error: ${connectErr instanceof Error ? connectErr.message : String(connectErr)}`)
+          connectingRef.current = false
+        }
       }
     } catch (err) {
       addLog('error', `Unexpected error: ${err instanceof Error ? err.message : String(err)}`)
