@@ -14,7 +14,7 @@ With the MCP [Authorization specification](https://spec.modelcontextprotocol.io/
 
 That's where `mcp-remote` comes in. As soon as your chosen MCP client supports remote, authorized servers, you can remove it. Until that time, drop in this one liner and dress for the MCP clients you want!
 
-## Configuration
+## Usage
 
 E.g: Claude Desktop or Windsurf
 
@@ -32,6 +32,23 @@ E.g: Claude Desktop or Windsurf
 Cursor:
 
 ![image](https://github.com/user-attachments/assets/14338bfa-a779-4e8a-a477-71f72cc5d99d)
+
+## Building Remote MCP Servers
+
+For instructions on building & deploying remote MCP servers, including acting as a valid OAuth client, see the following resources:
+
+* https://developers.cloudflare.com/agents/guides/remote-mcp-server/
+
+In particular, see:
+
+* https://github.com/cloudflare/workers-oauth-provider for defining an MCP-comlpiant OAuth server in Cloudflare Workers
+* https://github.com/cloudflare/agents/tree/main/examples/mcp for defining an `McpAgent` using the [`agents`](https://npmjs.com/package/agents) framework.
+
+For more information about testing these servers, see also:
+
+* https://developers.cloudflare.com/agents/guides/test-remote-mcp-server/
+
+Know of more resources you'd like to share? Please add them to this Readme and send a PR!
 
 ## Debugging
 
