@@ -24,6 +24,10 @@ Cursor:
 
 ## Debugging
 
+### Check your Node version
+
+Make sure that the version of Node you have installed is [16 or higher](https://modelcontextprotocol.io/quickstart/server).
+
 ### Restart Claude
 
 When modifying `claude_desktop_config.json` it can helpful to completely restart Claude
