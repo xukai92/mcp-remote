@@ -44,7 +44,7 @@ this might look like:
         "https://remote.mcp.server/sse"
       ],
       "env": {
-        "NODE_EXTRA_CA_CERTS": "\${your CA certificate file path}.pem"
+        "NODE_EXTRA_CA_CERTS": "{your CA certificate file path}.pem"
       }
     }
   }
