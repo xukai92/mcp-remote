@@ -2,6 +2,8 @@ import { OAuthClientProvider, UnauthorizedError } from '@modelcontextprotocol/sd
 import { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js'
 import { Transport } from '@modelcontextprotocol/sdk/shared/transport.js'
 
+const pid = process.pid
+
 /**
  * Creates a bidirectional proxy between two transports
  * @param params The transport connections to proxy between
@@ -63,7 +65,7 @@ export async function connectToRemoteServer(
   authProvider: OAuthClientProvider,
   waitForAuthCode: () => Promise<string>,
 ): Promise<SSEClientTransport> {
-  console.error('Connecting to remote server:', serverUrl)
+  console.error(`[${pid}] Connecting to remote server: ${serverUrl}`)
   const url = new URL(serverUrl)
   const transport = new SSEClientTransport(url, { authProvider })
 
