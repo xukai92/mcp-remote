@@ -10,7 +10,7 @@ import path from 'path'
 import os from 'os'
 import crypto from 'crypto'
 import net from 'net'
-import {OAuthClientProvider} from '@modelcontextprotocol/sdk/client/auth.js'
+import { OAuthClientProvider } from '@modelcontextprotocol/sdk/client/auth.js'
 import {
   OAuthClientInformation,
   OAuthClientInformationFull,
@@ -18,7 +18,7 @@ import {
   OAuthTokens,
   OAuthTokensSchema,
 } from '@modelcontextprotocol/sdk/shared/auth.js'
-import {OAuthCallbackServerOptions, OAuthProviderOptions} from "../lib/types.js";
+import { OAuthCallbackServerOptions, OAuthProviderOptions } from '../lib/types.js'
 
 /**
  * Implements the OAuthClientProvider interface for Node.js environments.

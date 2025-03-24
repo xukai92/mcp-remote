@@ -1,4 +1,4 @@
-import {EventEmitter} from "events";
+import { EventEmitter } from 'events'
 
 /**
  * Options for creating an OAuth client provider

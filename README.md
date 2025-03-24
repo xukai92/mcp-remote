@@ -11,10 +11,7 @@ E.g: Claude Desktop or Windsurf
   "mcpServers": {
     "remote-example": {
       "command": "npx",
-      "args": [
-        "mcp-remote",
-        "https://remote.mcp.server/sse"
-      ]
+      "args": ["mcp-remote", "https://remote.mcp.server/sse"]
     }
   }
 }
@@ -23,4 +20,3 @@ E.g: Claude Desktop or Windsurf
 Cursor:
 
 ![image](https://github.com/user-attachments/assets/14338bfa-a779-4e8a-a477-71f72cc5d99d)
-

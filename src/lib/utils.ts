@@ -1,24 +1,23 @@
-import { OAuthClientProvider, UnauthorizedError } from "@modelcontextprotocol/sdk/client/auth.js";
-import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js";
-import { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
+import { OAuthClientProvider, UnauthorizedError } from '@modelcontextprotocol/sdk/client/auth.js'
+import { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js'
+import { Transport } from '@modelcontextprotocol/sdk/shared/transport.js'
 
 /**
  * Creates a bidirectional proxy between two transports
  * @param params The transport connections to proxy between
  */
-export function mcpProxy({transportToClient, transportToServer}: {
-  transportToClient: Transport;
-  transportToServer: Transport
-}) {
+export function mcpProxy({ transportToClient, transportToServer }: { transportToClient: Transport; transportToServer: Transport }) {
   let transportToClientClosed = false
   let transportToServerClosed = false
 
   transportToClient.onmessage = (message) => {
+    // @ts-expect-error TODO
     console.error('[Local→Remote]', message.method || message.id)
     transportToServer.send(message).catch(onServerError)
   }
 
   transportToServer.onmessage = (message) => {
+    // @ts-expect-error TODO: fix this type
     console.error('[Remote→Local]', message.method || message.id)
     transportToClient.send(message).catch(onClientError)
   }
@@ -66,7 +65,7 @@ export async function connectToRemoteServer(
 ): Promise<SSEClientTransport> {
   console.error('Connecting to remote server:', serverUrl)
   const url = new URL(serverUrl)
-  const transport = new SSEClientTransport(url, {authProvider})
+  const transport = new SSEClientTransport(url, { authProvider })
 
   try {
     await transport.start()
@@ -84,7 +83,7 @@ export async function connectToRemoteServer(
         await transport.finishAuth(code)
 
         // Create a new transport after auth
-        const newTransport = new SSEClientTransport(url, {authProvider})
+        const newTransport = new SSEClientTransport(url, { authProvider })
         await newTransport.start()
         console.error('Connected to remote server after authentication')
         return newTransport
