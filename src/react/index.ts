@@ -5,6 +5,12 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { discoverOAuthMetadata, exchangeAuthorization, startAuthorization } from '@modelcontextprotocol/sdk/client/auth.js'
 import { OAuthClientInformation, OAuthMetadata, OAuthTokens } from '@modelcontextprotocol/sdk/shared/auth.js'
 
+function assert(condition: unknown, message: string): asserts condition {
+  if (!condition) {
+    throw new Error(message)
+  }
+}
+
 export type UseMcpOptions = {
   /** The /sse URL of your remote MCP server */
   url: string
@@ -259,7 +265,6 @@ export function useMcp(options: UseMcpOptions): UseMcpResult {
   const codeVerifierRef = useRef<string | undefined>(undefined)
   const connectingRef = useRef<boolean>(false)
   const isInitialMount = useRef<boolean>(true)
-  let handleAuthentication: () => Promise<string>
 
   // Set up default options
   const {
@@ -338,6 +343,114 @@ export function useMcp(options: UseMcpOptions): UseMcpResult {
     setError(undefined)
   }, [addLog])
 
+  // Start the auth flow and get the auth URL
+  const startAuthFlow = useCallback(async (): Promise<URL | undefined> => {
+    if (!authProviderRef.current || !metadataRef.current) {
+      throw new Error('Auth provider or metadata not available')
+    }
+
+    addLog('info', 'Starting authentication flow...')
+
+    // Check if we have client info
+    let clientInfo = await authProviderRef.current.clientInformation()
+
+    if (!clientInfo) {
+      // Register client dynamically
+      addLog('info', 'No client information found, registering...')
+      // Note: In a complete implementation, you'd register the client here
+      // This would be done server-side in a real application
+      throw new Error('Dynamic client registration not implemented in this example')
+    }
+
+    // Start authorization flow
+    addLog('info', 'Preparing authorization...')
+    const { authorizationUrl, codeVerifier } = await startAuthorization(url, {
+      metadata: metadataRef.current,
+      clientInformation: clientInfo,
+      redirectUrl: authProviderRef.current.redirectUrl,
+    })
+
+    // Save code verifier and auth URL for later use
+    await authProviderRef.current.saveCodeVerifier(codeVerifier)
+    codeVerifierRef.current = codeVerifier
+    authUrlRef.current = authorizationUrl
+    setAuthUrl(authorizationUrl.toString())
+
+    return authorizationUrl
+  }, [url, addLog])
+
+  // Handle authentication flow
+  const handleAuthentication = useCallback(async () => {
+    if (!authProviderRef.current) {
+      throw new Error('Auth provider not available')
+    }
+
+    // Get or create the auth URL
+    if (!authUrlRef.current) {
+      try {
+        await startAuthFlow()
+      } catch (err) {
+        addLog('error', `Failed to start auth flow: ${err instanceof Error ? err.message : String(err)}`)
+        throw err
+      }
+    }
+
+    if (!authUrlRef.current) {
+      throw new Error('Failed to create authorization URL')
+    }
+
+    // Set up listener for post-auth message
+    const authPromise = new Promise<string>((resolve, reject) => {
+      const timeoutId = setTimeout(
+        () => {
+          window.removeEventListener('message', messageHandler)
+          reject(new Error('Authentication timeout after 5 minutes'))
+        },
+        5 * 60 * 1000,
+      )
+
+      const messageHandler = (event: MessageEvent) => {
+        // Verify origin for security
+        if (event.origin !== window.location.origin) return
+
+        if (event.data && event.data.type === 'mcp_auth_callback' && event.data.code) {
+          window.removeEventListener('message', messageHandler)
+          clearTimeout(timeoutId)
+
+          // TODO: not this, obviously
+          // reload window, we should find the token in local storage
+          window.location.reload()
+          // resolve(event.data.code)
+        }
+      }
+
+      window.addEventListener('message', messageHandler)
+    })
+
+    // Redirect to authorization
+    addLog('info', 'Opening authorization window...')
+    assert(metadataRef.current, 'Metadata not available')
+    const redirectResult = await authProviderRef.current.redirectToAuthorization(authUrlRef.current, metadataRef.current, {
+      popupFeatures,
+    })
+
+    if (!redirectResult.success) {
+      // Popup was blocked
+      setState('failed')
+      setError('Authentication popup was blocked by the browser. Please click the link to authenticate in a new window.')
+      setAuthUrl(redirectResult.url)
+      addLog('warn', 'Authentication popup was blocked. User needs to manually authorize.')
+      throw new Error('Authentication popup blocked')
+    }
+
+    // Wait for auth to complete
+    addLog('info', 'Waiting for authorization...')
+    const code = await authPromise
+    addLog('info', 'Authorization code received')
+
+    return code
+  }, [url, addLog, popupFeatures, startAuthFlow])
+
   // Initialize connection to MCP server
   const connect = useCallback(async () => {
     // Prevent multiple simultaneous connection attempts
@@ -387,11 +500,13 @@ export function useMcp(options: UseMcpOptions): UseMcpResult {
 
       const serverUrl = new URL(url)
       transportRef.current = new SSEClientTransport(serverUrl, {
+        // @ts-expect-error TODO: fix this type, expect BrowserOAuthClientProvider
         authProvider: authProviderRef.current,
       })
 
       // Set up transport handlers
       transportRef.current.onmessage = (message: JSONRPCMessage) => {
+        // @ts-expect-error TODO: fix this type
         addLog('debug', `Received message: ${message.method || message.id}`)
       }
 
@@ -506,111 +621,6 @@ export function useMcp(options: UseMcpOptions): UseMcpResult {
     }
     return undefined
   }, [])
-
-  // Start the auth flow and get the auth URL
-  const startAuthFlow = useCallback(async (): Promise<URL | undefined> => {
-    if (!authProviderRef.current || !metadataRef.current) {
-      throw new Error('Auth provider or metadata not available')
-    }
-
-    addLog('info', 'Starting authentication flow...')
-
-    // Check if we have client info
-    let clientInfo = await authProviderRef.current.clientInformation()
-
-    if (!clientInfo) {
-      // Register client dynamically
-      addLog('info', 'No client information found, registering...')
-      // Note: In a complete implementation, you'd register the client here
-      // This would be done server-side in a real application
-      throw new Error('Dynamic client registration not implemented in this example')
-    }
-
-    // Start authorization flow
-    addLog('info', 'Preparing authorization...')
-    const { authorizationUrl, codeVerifier } = await startAuthorization(url, {
-      metadata: metadataRef.current,
-      clientInformation: clientInfo,
-      redirectUrl: authProviderRef.current.redirectUrl,
-    })
-
-    // Save code verifier and auth URL for later use
-    await authProviderRef.current.saveCodeVerifier(codeVerifier)
-    codeVerifierRef.current = codeVerifier
-    authUrlRef.current = authorizationUrl
-    setAuthUrl(authorizationUrl.toString())
-
-    return authorizationUrl
-  }, [url, addLog])
-
-  // Handle authentication flow
-  handleAuthentication = useCallback(async () => {
-    if (!authProviderRef.current) {
-      throw new Error('Auth provider not available')
-    }
-
-    // Get or create the auth URL
-    if (!authUrlRef.current) {
-      try {
-        await startAuthFlow()
-      } catch (err) {
-        addLog('error', `Failed to start auth flow: ${err instanceof Error ? err.message : String(err)}`)
-        throw err
-      }
-    }
-
-    if (!authUrlRef.current) {
-      throw new Error('Failed to create authorization URL')
-    }
-
-    // Set up listener for post-auth message
-    const authPromise = new Promise<string>((resolve, reject) => {
-      const timeoutId = setTimeout(
-        () => {
-          window.removeEventListener('message', messageHandler)
-          reject(new Error('Authentication timeout after 5 minutes'))
-        },
-        5 * 60 * 1000,
-      )
-
-      const messageHandler = (event: MessageEvent) => {
-        // Verify origin for security
-        if (event.origin !== window.location.origin) return
-
-        if (event.data && event.data.type === 'mcp_auth_callback' && event.data.code) {
-          window.removeEventListener('message', messageHandler)
-          clearTimeout(timeoutId)
-
-          // TODO: not this, obviously
-          // reload window, we should find the token in local storage
-          window.location.reload()
-          // resolve(event.data.code)
-        }
-      }
-
-      window.addEventListener('message', messageHandler)
-    })
-
-    // Redirect to authorization
-    addLog('info', 'Opening authorization window...')
-    const redirectResult = await authProviderRef.current.redirectToAuthorization(authUrlRef.current, metadataRef.current, { popupFeatures })
-
-    if (!redirectResult.success) {
-      // Popup was blocked
-      setState('failed')
-      setError('Authentication popup was blocked by the browser. Please click the link to authenticate in a new window.')
-      setAuthUrl(redirectResult.url)
-      addLog('warn', 'Authentication popup was blocked. User needs to manually authorize.')
-      throw new Error('Authentication popup blocked')
-    }
-
-    // Wait for auth to complete
-    addLog('info', 'Waiting for authorization...')
-    const code = await authPromise
-    addLog('info', 'Authorization code received')
-
-    return code
-  }, [url, addLog, popupFeatures, startAuthFlow])
 
   // Handle auth completion - this is called when we receive a message from the popup
   const handleAuthCompletion = useCallback(
