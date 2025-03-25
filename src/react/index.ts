@@ -307,7 +307,7 @@ class McpClient {
   // Client and transport
   private client: Client | null = null
   private transport: SSEClientTransport | null = null
-  private authProvider: BrowserOAuthClientProvider | null = null
+  private authProvider: BrowserOAuthClientProvider | undefined = undefined
 
   // Authentication state
   private metadata?: OAuthMetadata
@@ -736,7 +736,9 @@ class McpClient {
             const tokens = JSON.parse(storedTokens)
             if (tokens.access_token) {
               this.addLog('info', 'Found tokens in localStorage via polling')
-              resolve(tokens.access_token)
+              // Resolve with an object that indicates tokens are already available
+              // This will signal to handleAuthCompletion that no token exchange is needed
+              resolve({ tokensAlreadyExchanged: true })
             }
           }
         } catch (err) {
@@ -747,8 +749,8 @@ class McpClient {
 
       // Start polling every 500ms using setTimeout for recursive polling
       const poll = () => {
-        pollForTokens()
         pollIntervalId = setTimeout(poll, 500) as unknown as number
+        pollForTokens()
       }
 
       poll() // Start the polling
@@ -780,15 +782,27 @@ class McpClient {
 
   /**
    * Handle authentication completion
+   * @param codeOrResult - Either the authorization code or an object indicating tokens are already available
    */
-  async handleAuthCompletion(code: string): Promise<void> {
+  async handleAuthCompletion(codeOrResult: string | { tokensAlreadyExchanged: boolean }): Promise<void> {
     if (!this.authProvider || !this.transport) {
       throw new Error('Authentication context not available')
     }
 
     try {
-      this.addLog('info', 'Finishing authorization...')
-      await this.transport.finishAuth(code)
+      // Check if we received an object indicating tokens are already available
+      if (typeof codeOrResult === 'object' && codeOrResult.tokensAlreadyExchanged) {
+        this.addLog('info', 'Using already exchanged tokens from localStorage')
+        // No need to exchange tokens, they're already in localStorage
+      } else if (typeof codeOrResult === 'string') {
+        // We received an authorization code that needs to be exchanged
+        this.addLog('info', 'Finishing authorization with code exchange...')
+        await this.transport.finishAuth(codeOrResult)
+        this.addLog('info', 'Authorization code exchanged for tokens')
+      } else {
+        throw new Error('Invalid authentication result')
+      }
+
       this.addLog('info', 'Authorization completed')
 
       // Reset auth URL state
@@ -962,11 +976,20 @@ export function useMcp(options: UseMcpOptions): UseMcpResult {
     const messageHandler = (event: MessageEvent) => {
       if (event.origin !== window.location.origin) return
 
-      if (event.data && event.data.type === 'mcp_auth_callback' && event.data.code) {
+      if (event.data && event.data.type === 'mcp_auth_callback') {
         const client = getClient()
-        client.handleAuthCompletion(event.data.code).catch((err) => {
-          console.error('Auth callback error:', err)
-        })
+
+        // If code is provided, use it; otherwise, assume tokens are already in localStorage
+        if (event.data.code) {
+          client.handleAuthCompletion(event.data.code).catch((err) => {
+            console.error('Auth callback error:', err)
+          })
+        } else {
+          // Tokens were already exchanged by the popup
+          client.handleAuthCompletion({ tokensAlreadyExchanged: true }).catch((err) => {
+            console.error('Auth callback error:', err)
+          })
+        }
       }
     }
 
@@ -1106,7 +1129,8 @@ export async function onMcpAuthorization(
       window.opener.postMessage(
         {
           type: 'mcp_auth_callback',
-          code: code,
+          // Don't send the code back since we've already done the token exchange
+          // This signals to the main window that tokens are already in localStorage
         },
         window.location.origin,
       )
