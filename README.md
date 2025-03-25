@@ -141,3 +141,19 @@ this might look like:
   }
 }
 ```
+
+### Check the logs
+
+[Follow Claude Desktop logs in real-time](https://modelcontextprotocol.io/docs/tools/debugging#debugging-in-claude-desktop)
+
+MacOS / Linux:
+
+`tail -n 20 -F ~/Library/Logs/Claude/mcp*.log`
+
+For bash on WSL:
+
+`tail -n 20 -f "C:\Users\YourUsername\AppData\Local\Claude\Logs\mcp.log"`
+
+or Powershell:
+
+`Get-Content "C:\Users\YourUsername\AppData\Local\Claude\Logs\mcp.log" -Wait -Tail 20`
