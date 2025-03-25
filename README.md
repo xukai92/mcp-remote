@@ -16,22 +16,77 @@ That's where `mcp-remote` comes in. As soon as your chosen MCP client supports r
 
 ## Usage
 
-E.g: Claude Desktop or Windsurf
+### Claude Desktop
+
+[Official Docs](https://modelcontextprotocol.io/quickstart/user)
+
+In order to add an MCP server to Claude Desktop you need to edit the configuration file located at:
+
+macOS: `~/Library/Application Support/Claude/claude_desktop_config.json`
+Windows: `%APPDATA%\Claude\claude_desktop_config.json`
+
+If it does not exist yet, [you may need to enable it under Settings > Developer](https://modelcontextprotocol.io/quickstart/user#2-add-the-filesystem-mcp-server).
 
 ```json
 {
   "mcpServers": {
     "remote-example": {
       "command": "npx",
-      "args": ["mcp-remote", "https://remote.mcp.server/sse"]
+      "args": [
+        "-y",
+        "mcp-remote",
+        "https://remote.mcp.server/sse"
+      ]
     }
   }
 }
 ```
 
-Cursor:
+Restart Claude Desktop to pick up the changes in the configuration file.
+Upon restarting, you should see a hammer icon in the bottom right corner
+of the input box.
 
-![image](https://github.com/user-attachments/assets/14338bfa-a779-4e8a-a477-71f72cc5d99d)
+### Cursor
+
+[Official Docs](https://docs.cursor.com/context/model-context-protocol)
+
+Add the following configuration to `~/.cursor/mcp.json`:
+
+```json
+{
+  "mcpServers": {
+    "remote-example": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "mcp-remote",
+        "https://remote.mcp.server/sse"
+      ]
+    }
+  }
+}
+```
+
+### Windsurf
+
+[Official Docs](https://docs.codeium.com/windsurf/mcp)
+
+Add the following configuration to `~/.codeium/windsurf/mcp_config.json`:
+
+```json
+{
+  "mcpServers": {
+    "remote-example": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "mcp-remote",
+        "https://remote.mcp.server/sse"
+      ]
+    }
+  }
+}
+```
 
 ## Building Remote MCP Servers
 
@@ -54,7 +109,10 @@ Know of more resources you'd like to share? Please add them to this Readme and s
 
 ### Check your Node version
 
-Make sure that the version of Node you have installed is [16 or higher](https://modelcontextprotocol.io/quickstart/server).
+Make sure that the version of Node you have installed is [16 or 
+higher](https://modelcontextprotocol.io/quickstart/server). Claude
+Desktop will use your system version of Node, even if you have a newer
+version installed elsewhere.
 
 ### Restart Claude
 
