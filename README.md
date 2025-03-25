@@ -23,6 +23,7 @@ That's where `mcp-remote` comes in. As soon as your chosen MCP client supports r
 In order to add an MCP server to Claude Desktop you need to edit the configuration file located at:
 
 macOS: `~/Library/Application Support/Claude/claude_desktop_config.json`
+
 Windows: `%APPDATA%\Claude\claude_desktop_config.json`
 
 If it does not exist yet, [you may need to enable it under Settings > Developer](https://modelcontextprotocol.io/quickstart/user#2-add-the-filesystem-mcp-server).
