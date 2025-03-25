@@ -44,7 +44,7 @@ export class NodeOAuthClientProvider implements OAuthClientProvider {
   }
 
   get redirectUrl(): string {
-    return `http://localhost:${this.options.callbackPort}${this.callbackPath}`
+    return `http://127.0.0.1:${this.options.callbackPort}${this.callbackPath}`
   }
 
   get clientMetadata() {
@@ -229,7 +229,7 @@ export function setupOAuthCallbackServer(options: OAuthCallbackServerOptions) {
   })
 
   const server = app.listen(options.port, () => {
-    console.error(`OAuth callback server running at http://localhost:${options.port}`)
+    console.error(`OAuth callback server running at http://127.0.0.1:${options.port}`)
   })
 
   /**
@@ -299,7 +299,7 @@ export async function parseCommandLineArgs(args: string[], defaultPort: number, 
   }
 
   const url = new URL(serverUrl)
-  const isLocalhost = url.hostname === 'localhost' && url.protocol === 'http:'
+  const isLocalhost = (url.hostname === 'localhost' || url.hostname === '127.0.0.1') && url.protocol === 'http:'
 
   if (!(url.protocol == 'https:' || isLocalhost)) {
     console.error(usage)
