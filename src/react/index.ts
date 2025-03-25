@@ -97,6 +97,8 @@ class BrowserOAuthClientProvider implements OAuthClientProvider {
   private clientName: string
   private clientUri: string
   private callbackUrl: string
+  // Store additional options for popup windows
+  private popupFeatures: string
 
   constructor(
     readonly serverUrl: string,
@@ -105,6 +107,7 @@ class BrowserOAuthClientProvider implements OAuthClientProvider {
       clientName?: string
       clientUri?: string
       callbackUrl?: string
+      popupFeatures?: string
     } = {},
   ) {
     this.storageKeyPrefix = options.storageKeyPrefix || 'mcp:auth'
@@ -112,6 +115,7 @@ class BrowserOAuthClientProvider implements OAuthClientProvider {
     this.clientName = options.clientName || 'MCP Browser Client'
     this.clientUri = options.clientUri || window.location.origin
     this.callbackUrl = options.callbackUrl || new URL('/oauth/callback', window.location.origin).toString()
+    this.popupFeatures = options.popupFeatures || 'width=600,height=700,resizable=yes,scrollbars=yes'
   }
 
   get redirectUrl(): string {
@@ -216,12 +220,21 @@ class BrowserOAuthClientProvider implements OAuthClientProvider {
     localStorage.setItem(key, JSON.stringify(tokens))
   }
 
-  async redirectToAuthorization(
+  /**
+   * Redirect method that matches the interface expected by OAuthClientProvider
+   */
+  async redirectToAuthorization(authorizationUrl: URL): Promise<void> {
+    // Simply open the URL in the current window
+    console.log('WE WERE ABOUT TO REDIRECT BUT WE DONT DO THAT HERE')
+    // window.location.href = authorizationUrl.toString()
+  }
+
+  /**
+   * Extended popup-based authorization method specific to browser environments
+   */
+  async openAuthorizationPopup(
     authorizationUrl: URL,
     metadata: OAuthMetadata,
-    options?: {
-      popupFeatures?: string
-    },
   ): Promise<{ success: boolean; popupBlocked?: boolean; url: string }> {
     // Store the auth state for the popup flow
     const state = Math.random().toString(36).substring(2)
@@ -238,14 +251,13 @@ class BrowserOAuthClientProvider implements OAuthClientProvider {
     authorizationUrl.searchParams.set('state', state)
 
     const authUrl = authorizationUrl.toString()
-    const popupFeatures = options?.popupFeatures || 'width=600,height=700,resizable=yes,scrollbars=yes'
 
     // Store the auth URL in case we need it for manual authentication
     localStorage.setItem(this.getKey('auth_url'), authUrl)
 
     try {
       // Open the authorization URL in a popup window
-      const popup = window.open(authUrl, 'mcp_auth', popupFeatures)
+      const popup = window.open(authUrl, 'mcp_auth', this.popupFeatures)
 
       // Check if popup was blocked or closed immediately
       if (!popup || popup.closed || popup.closed === undefined) {
@@ -735,10 +747,10 @@ class McpClient {
             // Parse tokens to make sure they're valid
             const tokens = JSON.parse(storedTokens)
             if (tokens.access_token) {
-              this.addLog('info', 'Found tokens in localStorage via polling')
+              console.log('Found tokens in localStorage via polling')
               // Resolve with an object that indicates tokens are already available
               // This will signal to handleAuthCompletion that no token exchange is needed
-              resolve({ tokensAlreadyExchanged: true })
+              resolve('TOKENS_ALREADY_EXCHANGED')
             }
           }
         } catch (err) {
@@ -759,9 +771,7 @@ class McpClient {
     // Redirect to authorization
     this.addLog('info', 'Opening authorization window...')
     assert(this.metadata, 'Metadata not available')
-    const redirectResult = await this.authProvider.redirectToAuthorization(this.authUrlRef, this.metadata, {
-      popupFeatures: this.options.popupFeatures,
-    })
+    const redirectResult = await this.authProvider.openAuthorizationPopup(this.authUrlRef, this.metadata)
 
     if (!redirectResult.success) {
       // Popup was blocked
@@ -782,25 +792,23 @@ class McpClient {
 
   /**
    * Handle authentication completion
-   * @param codeOrResult - Either the authorization code or an object indicating tokens are already available
+   * @param code - The authorization code or special token indicator
    */
-  async handleAuthCompletion(codeOrResult: string | { tokensAlreadyExchanged: boolean }): Promise<void> {
+  async handleAuthCompletion(code: string): Promise<void> {
     if (!this.authProvider || !this.transport) {
       throw new Error('Authentication context not available')
     }
 
     try {
-      // Check if we received an object indicating tokens are already available
-      if (typeof codeOrResult === 'object' && codeOrResult.tokensAlreadyExchanged) {
+      // Check if this is our special token indicator
+      if (code === 'TOKENS_ALREADY_EXCHANGED') {
         this.addLog('info', 'Using already exchanged tokens from localStorage')
         // No need to exchange tokens, they're already in localStorage
-      } else if (typeof codeOrResult === 'string') {
+      } else {
         // We received an authorization code that needs to be exchanged
         this.addLog('info', 'Finishing authorization with code exchange...')
-        await this.transport.finishAuth(codeOrResult)
+        await this.transport.finishAuth(code)
         this.addLog('info', 'Authorization code exchanged for tokens')
-      } else {
-        throw new Error('Invalid authentication result')
       }
 
       this.addLog('info', 'Authorization completed')
@@ -986,7 +994,7 @@ export function useMcp(options: UseMcpOptions): UseMcpResult {
           })
         } else {
           // Tokens were already exchanged by the popup
-          client.handleAuthCompletion({ tokensAlreadyExchanged: true }).catch((err) => {
+          client.handleAuthCompletion('TOKENS_ALREADY_EXCHANGED').catch((err) => {
             console.error('Auth callback error:', err)
           })
         }
