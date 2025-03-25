@@ -93,7 +93,7 @@ type StoredState = {
  */
 class BrowserOAuthClientProvider implements OAuthClientProvider {
   private storageKeyPrefix: string
-  private serverUrlHash: string
+  serverUrlHash: string
   private clientName: string
   private clientUri: string
   private callbackUrl: string
@@ -236,19 +236,27 @@ class BrowserOAuthClientProvider implements OAuthClientProvider {
     authorizationUrl: URL,
     metadata: OAuthMetadata,
   ): Promise<{ success: boolean; popupBlocked?: boolean; url: string }> {
-    // Store the auth state for the popup flow
-    const state = Math.random().toString(36).substring(2)
-    const stateKey = `${this.storageKeyPrefix}:state_${state}`
-    localStorage.setItem(
-      stateKey,
-      JSON.stringify({
-        authorizationUrl: authorizationUrl.toString(),
-        metadata,
-        serverUrlHash: this.serverUrlHash,
-        expiry: +new Date() + 1000 * 60 * 5 /* 5 minutes */,
-      } as StoredState),
-    )
-    authorizationUrl.searchParams.set('state', state)
+    // Use existing state parameter if it exists in the URL
+    const existingState = authorizationUrl.searchParams.get('state')
+
+    if (!existingState) {
+      // This should not happen as startAuthFlow should've added state
+      // But if it doesn't exist, add it as a fallback
+      const state = Math.random().toString(36).substring(2)
+      const stateKey = `${this.storageKeyPrefix}:state_${state}`
+
+      localStorage.setItem(
+        stateKey,
+        JSON.stringify({
+          authorizationUrl: authorizationUrl.toString(),
+          metadata,
+          serverUrlHash: this.serverUrlHash,
+          expiry: +new Date() + 1000 * 60 * 5 /* 5 minutes */,
+        } as StoredState),
+      )
+
+      authorizationUrl.searchParams.set('state', state)
+    }
 
     const authUrl = authorizationUrl.toString()
 
@@ -324,6 +332,7 @@ class McpClient {
   // Authentication state
   private metadata?: OAuthMetadata
   private authUrlRef?: URL
+  private authState?: string
   private codeVerifier?: string
   private connecting = false
 
@@ -675,7 +684,30 @@ class McpClient {
     // Save code verifier and auth URL for later use
     await this.authProvider.saveCodeVerifier(codeVerifier)
     this.codeVerifier = codeVerifier
+
+    // Generate state parameter that will be used for both popup and manual flows
+    const state = Math.random().toString(36).substring(2)
+    const stateKey = `${this.options.storageKeyPrefix}:state_${state}`
+
+    // Store state for later retrieval
+    localStorage.setItem(
+      stateKey,
+      JSON.stringify({
+        authorizationUrl: authorizationUrl.toString(),
+        metadata: this.metadata,
+        serverUrlHash: this.authProvider.serverUrlHash,
+        expiry: +new Date() + 1000 * 60 * 5 /* 5 minutes */,
+      } as StoredState),
+    )
+
+    // Add state to the URL
+    authorizationUrl.searchParams.set('state', state)
+
+    // Store the state and URL for later use
+    this.authState = state
     this.authUrlRef = authorizationUrl
+
+    // Set manual auth URL (already includes state parameter)
     this.setAuthUrl(authorizationUrl.toString())
 
     return authorizationUrl
@@ -863,14 +895,41 @@ class McpClient {
    * Manually trigger authentication
    */
   async authenticate(): Promise<string | undefined> {
-    if (!this.authUrlRef) {
-      await this.startAuthFlow()
+    if (!this.authProvider) {
+      try {
+        // Discover OAuth metadata if we don't have it yet
+        this.addLog('info', 'Discovering OAuth metadata...')
+        this.metadata = await discoverOAuthMetadata(this.url)
+        this.addLog('debug', `OAuth metadata: ${this.metadata ? 'Found' : 'Not available'}`)
+
+        if (!this.metadata) {
+          throw new Error('No OAuth metadata available')
+        }
+
+        // Initialize the auth provider now that we have metadata
+        this.initAuthProvider()
+      } catch (err) {
+        this.addLog('error', `Failed to discover OAuth metadata: ${err instanceof Error ? err.message : String(err)}`)
+        return undefined
+      }
     }
 
-    if (this.authUrlRef) {
+    try {
+      // If we don't have an auth URL yet with state param, start a new flow
+      if (!this.authUrlRef || !this.authUrlRef.searchParams.get('state')) {
+        await this.startAuthFlow()
+      }
+
+      if (!this.authUrlRef) {
+        throw new Error('Failed to create authorization URL')
+      }
+
+      // The URL already has the state parameter from startAuthFlow
       return this.authUrlRef.toString()
+    } catch (err) {
+      this.addLog('error', `Error preparing manual authentication: ${err instanceof Error ? err.message : String(err)}`)
+      return undefined
     }
-    return undefined
   }
 
   /**
