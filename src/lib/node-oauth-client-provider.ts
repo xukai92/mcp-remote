@@ -59,6 +59,7 @@ export class NodeOAuthClientProvider implements OAuthClientProvider {
    * @returns The client information or undefined
    */
   async clientInformation(): Promise<OAuthClientInformation | undefined> {
+    // log('Reading client info')
     return readJsonFile<OAuthClientInformation>(this.serverUrlHash, 'client_info.json', OAuthClientInformationSchema, this.options.clean)
   }
 
@@ -67,6 +68,7 @@ export class NodeOAuthClientProvider implements OAuthClientProvider {
    * @param clientInformation The client information to save
    */
   async saveClientInformation(clientInformation: OAuthClientInformationFull): Promise<void> {
+    // log('Saving client info')
     await writeJsonFile(this.serverUrlHash, 'client_info.json', clientInformation)
   }
 
@@ -75,6 +77,8 @@ export class NodeOAuthClientProvider implements OAuthClientProvider {
    * @returns The OAuth tokens or undefined
    */
   async tokens(): Promise<OAuthTokens | undefined> {
+    // log('Reading tokens')
+    // console.log(new Error().stack)
     return readJsonFile<OAuthTokens>(this.serverUrlHash, 'tokens.json', OAuthTokensSchema, this.options.clean)
   }
 
@@ -83,6 +87,7 @@ export class NodeOAuthClientProvider implements OAuthClientProvider {
    * @param tokens The tokens to save
    */
   async saveTokens(tokens: OAuthTokens): Promise<void> {
+    // log('Saving tokens')
     await writeJsonFile(this.serverUrlHash, 'tokens.json', tokens)
   }
 
@@ -105,6 +110,7 @@ export class NodeOAuthClientProvider implements OAuthClientProvider {
    * @param codeVerifier The code verifier to save
    */
   async saveCodeVerifier(codeVerifier: string): Promise<void> {
+    // log('Saving code verifier')
     await writeTextFile(this.serverUrlHash, 'code_verifier.txt', codeVerifier)
   }
 
@@ -113,6 +119,7 @@ export class NodeOAuthClientProvider implements OAuthClientProvider {
    * @returns The code verifier
    */
   async codeVerifier(): Promise<string> {
+    // log('Reading code verifier')
     return await readTextFile(this.serverUrlHash, 'code_verifier.txt', 'No code verifier saved for session', this.options.clean)
   }
 }

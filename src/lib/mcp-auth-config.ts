@@ -169,11 +169,15 @@ export async function readJsonFile<T>(
 
     const filePath = getConfigFilePath(serverUrlHash, filename)
     const content = await fs.readFile(filePath, 'utf-8')
-    return await schema.parseAsync(JSON.parse(content))
+    const result = await schema.parseAsync(JSON.parse(content))
+    // console.log({ filename: result })
+    return result
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+      // console.log(`File ${filename} does not exist`)
       return undefined
     }
+    log(`Error reading ${filename}:`, error)
     return undefined
   }
 }

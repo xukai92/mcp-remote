@@ -44,7 +44,10 @@ async function runClient(serverUrl: string, callbackPort: number, clean: boolean
 
   // If auth was completed by another instance, just log that we'll use the auth from disk
   if (skipBrowserAuth) {
-    log('Authentication was completed by another instance - will use tokens from disk')
+    log('Authentication was completed by another instance - will use tokens from disk...')
+    // TODO: remove, the callback is happening before the tokens are exchanged
+    //  so we're slightly too early
+    await new Promise((res) => setTimeout(res, 1_000))
   }
 
   // Create the client
