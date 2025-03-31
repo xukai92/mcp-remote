@@ -19,7 +19,8 @@
   ],
   "main": "dist/index.js",
   "bin": {
-    "mcp-remote": "dist/cli/proxy.js"
+    "mcp-remote": "dist/proxy.js",
+    "mcp-remote-client": "dist/client.js"
   },
   "scripts": {
     "dev": "tsup --watch",
