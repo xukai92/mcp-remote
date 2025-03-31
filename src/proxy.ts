@@ -38,6 +38,11 @@ async function runProxy(serverUrl: string, callbackPort: number, clean: boolean 
     clientName: 'MCP CLI Proxy',
     clean,
   })
+  
+  // If auth was completed by another instance, just log that we'll use the auth from disk
+  if (skipBrowserAuth) {
+    log('Authentication was completed by another instance - will use tokens from disk')
+  }
 
   // Create the STDIO transport for local connections
   const localTransport = new StdioServerTransport()

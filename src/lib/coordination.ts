@@ -58,9 +58,9 @@ export async function isLockValid(lockData: LockfileData): Promise<boolean> {
 /**
  * Waits for authentication from another server instance
  * @param port The port to connect to
- * @returns The auth code if successful, false otherwise
+ * @returns True if authentication completed successfully, false otherwise
  */
-export async function waitForAuthentication(port: number): Promise<string | false> {
+export async function waitForAuthentication(port: number): Promise<boolean> {
   log(`Waiting for authentication from the server on port ${port}...`)
 
   try {
@@ -70,11 +70,13 @@ export async function waitForAuthentication(port: number): Promise<string | fals
       const response = await fetch(url)
 
       if (response.status === 200) {
-        const code = await response.text()
-        log(`Received code: ${code}`)
-        return code // Return the auth code
+        // Auth completed, but we don't return the code anymore
+        log(`Authentication completed by other instance`)
+        return true
       } else if (response.status === 202) {
-        // do nothing, loop
+        // Continue polling
+        log(`Authentication still in progress`)
+        await new Promise(resolve => setTimeout(resolve, 1000))
       } else {
         log(`Unexpected response status: ${response.status}`)
         return false
@@ -97,7 +99,7 @@ export async function coordinateAuth(
   serverUrlHash: string,
   callbackPort: number,
   events: EventEmitter,
-): Promise<{ server: Server; waitForAuthCode: () => Promise<string>; skipBrowserAuth: boolean; authCode?: string }> {
+): Promise<{ server: Server; waitForAuthCode: () => Promise<string>; skipBrowserAuth: boolean }> {
   // Check for a lockfile
   const lockData = await checkLockfile(serverUrlHash)
 
@@ -107,19 +109,24 @@ export async function coordinateAuth(
 
     try {
       // Try to wait for the authentication to complete
-      const code = await waitForAuthentication(lockData.port)
-      if (code) {
+      const authCompleted = await waitForAuthentication(lockData.port)
+      if (authCompleted) {
         log('Authentication completed by another instance')
 
-        // Setup a dummy server and return a pre-resolved promise for the auth code
+        // Setup a dummy server - the client will use tokens directly from disk
         const dummyServer = express().listen(0) // Listen on any available port
-        const dummyWaitForAuthCode = () => Promise.resolve(code)
+        
+        // This shouldn't actually be called in normal operation, but provide it for API compatibility
+        const dummyWaitForAuthCode = () => {
+          log('WARNING: waitForAuthCode called in secondary instance - this is unexpected')
+          // Return a promise that never resolves - the client should use the tokens from disk instead
+          return new Promise<string>(() => {})
+        }
 
         return {
           server: dummyServer,
           waitForAuthCode: dummyWaitForAuthCode,
           skipBrowserAuth: true,
-          authCode: code,
         }
       } else {
         log('Taking over authentication process...')
@@ -176,6 +183,6 @@ export async function coordinateAuth(
   return {
     server,
     waitForAuthCode,
-    skipBrowserAuth: false,
+    skipBrowserAuth: false
   }
 }

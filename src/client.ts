@@ -42,9 +42,9 @@ async function runClient(serverUrl: string, callbackPort: number, clean: boolean
     clean,
   })
 
-  // If we got auth from another instance, pre-populate with the received code
+  // If auth was completed by another instance, just log that we'll use the auth from disk
   if (skipBrowserAuth) {
-    log('Using auth code from another instance')
+    log('Authentication was completed by another instance - will use tokens from disk')
   }
 
   // Create the client

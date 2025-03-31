@@ -135,9 +135,10 @@ export function setupOAuthCallbackServerWithLongPoll(options: OAuthCallbackServe
   // Long-polling endpoint
   app.get('/wait-for-auth', (req, res) => {
     if (authCode) {
-      // Auth already completed
-      log('Auth already completed, returning immediately')
-      res.status(200).send(authCode)
+      // Auth already completed - just return 200 without the actual code
+      // Secondary instances will read tokens from disk
+      log('Auth already completed, returning 200')
+      res.status(200).send('Authentication completed')
       return
     }
 
@@ -155,11 +156,11 @@ export function setupOAuthCallbackServerWithLongPoll(options: OAuthCallbackServe
 
     // If auth completes while we're waiting, send the response immediately
     authCompletedPromise
-      .then((code) => {
+      .then(() => {
         clearTimeout(longPollTimeout)
         if (!res.headersSent) {
           log('Auth completed during long poll, responding with 200')
-          res.status(200).send(code)
+          res.status(200).send('Authentication completed')
         }
       })
       .catch(() => {
