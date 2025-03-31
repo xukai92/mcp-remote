@@ -169,6 +169,17 @@ this might look like:
 * For bash on WSL:<br/>`tail -n 20 -f "C:\Users\YourUsername\AppData\Local\Claude\Logs\mcp.log"`
 * Powershell: <br/>`Get-Content "C:\Users\YourUsername\AppData\Local\Claude\Logs\mcp.log" -Wait -Tail 20`
 
+## Debugging
+
+If you encounter the following error, returned by the `/callback` URL:
+
+```
+Authentication Error
+Token exchange failed: HTTP 400
+```
+
+You can run `rm -rf ~/.mcp-auth` to clear any locally stored state and tokens.
+
 ### "Client" mode
 
 Run the following on the command line (not from an MCP server):
