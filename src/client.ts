@@ -14,7 +14,8 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js'
 import { ListResourcesResultSchema, ListToolsResultSchema } from '@modelcontextprotocol/sdk/types.js'
 import { UnauthorizedError } from '@modelcontextprotocol/sdk/client/auth.js'
-import { NodeOAuthClientProvider, setupOAuthCallbackServer, parseCommandLineArgs, setupSignalHandlers } from './shared'
+import { NodeOAuthClientProvider } from './lib/node-oauth-client-provider'
+import { parseCommandLineArgs, setupOAuthCallbackServer, setupSignalHandlers } from './lib/utils'
 
 /**
  * Main function to run the client

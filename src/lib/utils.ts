@@ -1,6 +1,9 @@
 import { OAuthClientProvider, UnauthorizedError } from '@modelcontextprotocol/sdk/client/auth.js'
 import { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js'
 import { Transport } from '@modelcontextprotocol/sdk/shared/transport.js'
+import { OAuthCallbackServerOptions } from './types'
+import express from 'express'
+import net from 'net'
 
 const pid = process.pid
 
@@ -98,4 +101,132 @@ export async function connectToRemoteServer(
       throw error
     }
   }
+}
+
+/**
+ * Sets up an Express server to handle OAuth callbacks
+ * @param options The server options
+ * @returns An object with the server, authCode, and waitForAuthCode function
+ */
+export function setupOAuthCallbackServer(options: OAuthCallbackServerOptions) {
+  let authCode: string | null = null
+  const app = express()
+
+  app.get(options.path, (req, res) => {
+    const code = req.query.code as string | undefined
+    if (!code) {
+      res.status(400).send('Error: No authorization code received')
+      return
+    }
+
+    authCode = code
+    res.send('Authorization successful! You may close this window and return to the CLI.')
+
+    // Notify main flow that auth code is available
+    options.events.emit('auth-code-received', code)
+  })
+
+  const server = app.listen(options.port, () => {
+    console.error(`OAuth callback server running at http://127.0.0.1:${options.port}`)
+  })
+
+  /**
+   * Waits for the OAuth authorization code
+   * @returns A promise that resolves with the authorization code
+   */
+  const waitForAuthCode = (): Promise<string> => {
+    return new Promise((resolve) => {
+      if (authCode) {
+        resolve(authCode)
+        return
+      }
+
+      options.events.once('auth-code-received', (code) => {
+        resolve(code)
+      })
+    })
+  }
+
+  return { server, authCode, waitForAuthCode }
+}
+
+/**
+ * Finds an available port on the local machine
+ * @param preferredPort Optional preferred port to try first
+ * @returns A promise that resolves to an available port number
+ */
+export async function findAvailablePort(preferredPort?: number): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const server = net.createServer()
+
+    server.on('error', (err: NodeJS.ErrnoException) => {
+      if (err.code === 'EADDRINUSE') {
+        // If preferred port is in use, get a random port
+        server.listen(0)
+      } else {
+        reject(err)
+      }
+    })
+
+    server.on('listening', () => {
+      const { port } = server.address() as net.AddressInfo
+      server.close(() => {
+        resolve(port)
+      })
+    })
+
+    // Try preferred port first, or get a random port
+    server.listen(preferredPort || 0)
+  })
+}
+
+/**
+ * Parses command line arguments for MCP clients and proxies
+ * @param args Command line arguments
+ * @param defaultPort Default port for the callback server if specified port is unavailable
+ * @param usage Usage message to show on error
+ * @returns A promise that resolves to an object with parsed serverUrl and callbackPort
+ */
+export async function parseCommandLineArgs(args: string[], defaultPort: number, usage: string) {
+  const serverUrl = args[0]
+  const specifiedPort = args[1] ? parseInt(args[1]) : undefined
+
+  if (!serverUrl) {
+    console.error(usage)
+    process.exit(1)
+  }
+
+  const url = new URL(serverUrl)
+  const isLocalhost = (url.hostname === 'localhost' || url.hostname === '127.0.0.1') && url.protocol === 'http:'
+
+  if (!(url.protocol == 'https:' || isLocalhost)) {
+    console.error(usage)
+    process.exit(1)
+  }
+
+  // Use the specified port, or find an available one
+  const callbackPort = specifiedPort || (await findAvailablePort(defaultPort))
+
+  if (specifiedPort) {
+    console.error(`Using specified callback port: ${callbackPort}`)
+  } else {
+    console.error(`Using automatically selected callback port: ${callbackPort}`)
+  }
+
+  return { serverUrl, callbackPort }
+}
+
+/**
+ * Sets up signal handlers for graceful shutdown
+ * @param cleanup Cleanup function to run on shutdown
+ */
+export function setupSignalHandlers(cleanup: () => Promise<void>) {
+  process.on('SIGINT', async () => {
+    console.error('\nShutting down...')
+    await cleanup()
+    process.exit(0)
+  })
+
+  // Keep the process alive
+  process.stdin.resume()
 }
