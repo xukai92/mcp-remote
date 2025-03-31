@@ -191,12 +191,12 @@ export async function parseCommandLineArgs(args: string[], defaultPort: number, 
   // Check for --clean flag
   const cleanIndex = args.indexOf('--clean')
   const clean = cleanIndex !== -1
-  
+
   // Remove the flag from args if it exists
   if (clean) {
     args.splice(cleanIndex, 1)
   }
-  
+
   const serverUrl = args[0]
   const specifiedPort = args[1] ? parseInt(args[1]) : undefined
 
@@ -221,7 +221,7 @@ export async function parseCommandLineArgs(args: string[], defaultPort: number, 
   } else {
     console.error(`Using automatically selected callback port: ${callbackPort}`)
   }
-  
+
   if (clean) {
     console.error('Clean mode enabled: config files will be reset before reading')
   }
@@ -243,3 +243,5 @@ export function setupSignalHandlers(cleanup: () => Promise<void>) {
   // Keep the process alive
   process.stdin.resume()
 }
+
+export const MCP_REMOTE_VERSION = require('../../package.json').version

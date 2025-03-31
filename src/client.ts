@@ -18,7 +18,7 @@ import { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js'
 import { ListResourcesResultSchema, ListToolsResultSchema } from '@modelcontextprotocol/sdk/types.js'
 import { UnauthorizedError } from '@modelcontextprotocol/sdk/client/auth.js'
 import { NodeOAuthClientProvider } from './lib/node-oauth-client-provider'
-import { parseCommandLineArgs, setupOAuthCallbackServer, setupSignalHandlers } from './lib/utils'
+import { parseCommandLineArgs, setupOAuthCallbackServer, setupSignalHandlers, MCP_REMOTE_VERSION } from './lib/utils'
 
 /**
  * Main function to run the client
@@ -39,7 +39,7 @@ async function runClient(serverUrl: string, callbackPort: number, clean: boolean
   const client = new Client(
     {
       name: 'mcp-remote',
-      version: require('../package.json').version,
+      version: MCP_REMOTE_VERSION,
     },
     {
       capabilities: {},
