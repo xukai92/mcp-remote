@@ -185,9 +185,18 @@ export async function findAvailablePort(preferredPort?: number): Promise<number>
  * @param args Command line arguments
  * @param defaultPort Default port for the callback server if specified port is unavailable
  * @param usage Usage message to show on error
- * @returns A promise that resolves to an object with parsed serverUrl and callbackPort
+ * @returns A promise that resolves to an object with parsed serverUrl, callbackPort, and clean flag
  */
 export async function parseCommandLineArgs(args: string[], defaultPort: number, usage: string) {
+  // Check for --clean flag
+  const cleanIndex = args.indexOf('--clean')
+  const clean = cleanIndex !== -1
+  
+  // Remove the flag from args if it exists
+  if (clean) {
+    args.splice(cleanIndex, 1)
+  }
+  
   const serverUrl = args[0]
   const specifiedPort = args[1] ? parseInt(args[1]) : undefined
 
@@ -212,8 +221,12 @@ export async function parseCommandLineArgs(args: string[], defaultPort: number, 
   } else {
     console.error(`Using automatically selected callback port: ${callbackPort}`)
   }
+  
+  if (clean) {
+    console.error('Clean mode enabled: config files will be reset before reading')
+  }
 
-  return { serverUrl, callbackPort }
+  return { serverUrl, callbackPort, clean }
 }
 
 /**

@@ -24,6 +24,26 @@ import fs from 'fs/promises'
  */
 
 /**
+ * Known configuration file names that might need to be cleaned
+ */
+export const knownConfigFiles = [
+  'client_info.json',
+  'tokens.json',
+  'code_verifier.txt',
+];
+
+/**
+ * Deletes all known configuration files for a specific server
+ * @param serverUrlHash The hash of the server URL
+ */
+export async function cleanServerConfig(serverUrlHash: string): Promise<void> {
+  console.error(`Cleaning configuration files for server: ${serverUrlHash}`)
+  for (const filename of knownConfigFiles) {
+    await deleteConfigFile(serverUrlHash, filename)
+  }
+}
+
+/**
  * Gets the configuration directory path
  * @returns The path to the configuration directory
  */
@@ -54,21 +74,57 @@ export function getServerUrlHash(serverUrl: string): string {
 }
 
 /**
+ * Gets the file path for a config file
+ * @param serverUrlHash The hash of the server URL
+ * @param filename The name of the file
+ * @returns The absolute file path
+ */
+export function getConfigFilePath(serverUrlHash: string, filename: string): string {
+  const configDir = getConfigDir()
+  return path.join(configDir, `${serverUrlHash}_${filename}`)
+}
+
+/**
+ * Deletes a config file if it exists
+ * @param serverUrlHash The hash of the server URL
+ * @param filename The name of the file to delete
+ */
+export async function deleteConfigFile(serverUrlHash: string, filename: string): Promise<void> {
+  try {
+    const filePath = getConfigFilePath(serverUrlHash, filename)
+    await fs.unlink(filePath)
+  } catch (error) {
+    // Ignore if file doesn't exist
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+      console.error(`Error deleting ${filename}:`, error)
+    }
+  }
+}
+
+/**
  * Reads a JSON file and parses it with the provided schema
  * @param serverUrlHash The hash of the server URL
  * @param filename The name of the file to read
  * @param schema The schema to validate against
+ * @param clean Whether to clean (delete) before reading
  * @returns The parsed file content or undefined if the file doesn't exist
  */
 export async function readJsonFile<T>(
   serverUrlHash: string, 
   filename: string, 
-  schema: any
+  schema: any,
+  clean: boolean = false
 ): Promise<T | undefined> {
   try {
     await ensureConfigDir()
-    const configDir = getConfigDir()
-    const filePath = path.join(configDir, `${serverUrlHash}_${filename}`)
+    
+    // If clean flag is set, delete the file before trying to read it
+    if (clean) {
+      await deleteConfigFile(serverUrlHash, filename)
+      return undefined
+    }
+    
+    const filePath = getConfigFilePath(serverUrlHash, filename)
     const content = await fs.readFile(filePath, 'utf-8')
     return await schema.parseAsync(JSON.parse(content))
   } catch (error) {
@@ -92,8 +148,7 @@ export async function writeJsonFile(
 ): Promise<void> {
   try {
     await ensureConfigDir()
-    const configDir = getConfigDir()
-    const filePath = path.join(configDir, `${serverUrlHash}_${filename}`)
+    const filePath = getConfigFilePath(serverUrlHash, filename)
     await fs.writeFile(filePath, JSON.stringify(data, null, 2), 'utf-8')
   } catch (error) {
     console.error(`Error writing ${filename}:`, error)
@@ -106,17 +161,25 @@ export async function writeJsonFile(
  * @param serverUrlHash The hash of the server URL
  * @param filename The name of the file to read
  * @param errorMessage Optional custom error message
+ * @param clean Whether to clean (delete) before reading
  * @returns The file content as a string
  */
 export async function readTextFile(
   serverUrlHash: string, 
   filename: string,
-  errorMessage?: string
+  errorMessage?: string,
+  clean: boolean = false
 ): Promise<string> {
   try {
     await ensureConfigDir()
-    const configDir = getConfigDir()
-    const filePath = path.join(configDir, `${serverUrlHash}_${filename}`)
+    
+    // If clean flag is set, delete the file before trying to read it
+    if (clean) {
+      await deleteConfigFile(serverUrlHash, filename)
+      throw new Error('File deleted due to clean flag')
+    }
+    
+    const filePath = getConfigFilePath(serverUrlHash, filename)
     return await fs.readFile(filePath, 'utf-8')
   } catch (error) {
     throw new Error(errorMessage || `Error reading ${filename}`)
@@ -136,8 +199,7 @@ export async function writeTextFile(
 ): Promise<void> {
   try {
     await ensureConfigDir()
-    const configDir = getConfigDir()
-    const filePath = path.join(configDir, `${serverUrlHash}_${filename}`)
+    const filePath = getConfigFilePath(serverUrlHash, filename)
     await fs.writeFile(filePath, text, 'utf-8')
   } catch (error) {
     console.error(`Error writing ${filename}:`, error)

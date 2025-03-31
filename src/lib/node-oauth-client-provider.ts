@@ -14,6 +14,7 @@ import {
   writeJsonFile,
   readTextFile,
   writeTextFile,
+  cleanServerConfig,
 } from './mcp-auth-config'
 
 /**
@@ -35,6 +36,13 @@ export class NodeOAuthClientProvider implements OAuthClientProvider {
     this.callbackPath = options.callbackPath || '/oauth/callback'
     this.clientName = options.clientName || 'MCP CLI Client'
     this.clientUri = options.clientUri || 'https://github.com/modelcontextprotocol/mcp-cli'
+    
+    // If clean flag is set, proactively clean all config files for this server
+    if (options.clean) {
+      cleanServerConfig(this.serverUrlHash).catch(err => {
+        console.error('Error cleaning server config:', err)
+      })
+    }
   }
 
   get redirectUrl(): string {
@@ -60,7 +68,8 @@ export class NodeOAuthClientProvider implements OAuthClientProvider {
     return readJsonFile<OAuthClientInformation>(
       this.serverUrlHash,
       'client_info.json',
-      OAuthClientInformationSchema
+      OAuthClientInformationSchema,
+      this.options.clean
     )
   }
 
@@ -77,7 +86,12 @@ export class NodeOAuthClientProvider implements OAuthClientProvider {
    * @returns The OAuth tokens or undefined
    */
   async tokens(): Promise<OAuthTokens | undefined> {
-    return readJsonFile<OAuthTokens>(this.serverUrlHash, 'tokens.json', OAuthTokensSchema)
+    return readJsonFile<OAuthTokens>(
+      this.serverUrlHash, 
+      'tokens.json', 
+      OAuthTokensSchema,
+      this.options.clean
+    )
   }
 
   /**
@@ -118,7 +132,8 @@ export class NodeOAuthClientProvider implements OAuthClientProvider {
     return await readTextFile(
       this.serverUrlHash, 
       'code_verifier.txt',
-      'No code verifier saved for session'
+      'No code verifier saved for session',
+      this.options.clean
     )
   }
 }

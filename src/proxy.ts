@@ -4,7 +4,10 @@
  * MCP Proxy with OAuth support
  * A bidirectional proxy between a local STDIO MCP server and a remote SSE server with OAuth authentication.
  *
- * Run with: npx tsx proxy.ts https://example.remote/server [callback-port]
+ * Run with: npx tsx proxy.ts [--clean] https://example.remote/server [callback-port]
+ *
+ * Options:
+ * --clean: Deletes stored configuration before reading, ensuring a fresh session
  *
  * If callback-port is not specified, an available port will be automatically selected.
  */
@@ -17,7 +20,7 @@ import { NodeOAuthClientProvider } from './lib/node-oauth-client-provider'
 /**
  * Main function to run the proxy
  */
-async function runProxy(serverUrl: string, callbackPort: number) {
+async function runProxy(serverUrl: string, callbackPort: number, clean: boolean = false) {
   // Set up event emitter for auth flow
   const events = new EventEmitter()
 
@@ -26,6 +29,7 @@ async function runProxy(serverUrl: string, callbackPort: number) {
     serverUrl,
     callbackPort,
     clientName: 'MCP CLI Proxy',
+    clean,
   })
 
   // Create the STDIO transport for local connections
@@ -91,9 +95,9 @@ to the CA certificate file. If using claude_desktop_config.json, this might look
 }
 
 // Parse command-line arguments and run the proxy
-parseCommandLineArgs(process.argv.slice(2), 3334, 'Usage: npx tsx proxy.ts <https://server-url> [callback-port]')
-  .then(({ serverUrl, callbackPort }) => {
-    return runProxy(serverUrl, callbackPort)
+parseCommandLineArgs(process.argv.slice(2), 3334, 'Usage: npx tsx proxy.ts [--clean] <https://server-url> [callback-port]')
+  .then(({ serverUrl, callbackPort, clean }) => {
+    return runProxy(serverUrl, callbackPort, clean)
   })
   .catch((error) => {
     console.error('Fatal error:', error)
