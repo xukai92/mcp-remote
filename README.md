@@ -74,8 +74,6 @@ All the most popular MCP clients (Claude Desktop, Cursor & Windsurf) use the fol
       ]
 ```
 
-* To ensure that no
-
 ### Claude Desktop
 
 [Official Docs](https://modelcontextprotocol.io/quickstart/user)
@@ -120,7 +118,7 @@ Know of more resources you'd like to share? Please add them to this Readme and s
 
 ## Troubleshooting
 
-### Wipe your `~/.mcp-auth` directory
+### Clear your `~/.mcp-auth` directory
 
 `mcp-remote` stores all the credential information inside `~/.mcp-auth` (or wherever your `MCP_REMOTE_CONFIG_DIR` points to). If you're having persistent issues, try running:
 
@@ -166,16 +164,17 @@ this might look like:
 
 ### Check the logs
 
-[Follow Claude Desktop logs in real-time](https://modelcontextprotocol.io/docs/tools/debugging#debugging-in-claude-desktop)
+* [Follow Claude Desktop logs in real-time](https://modelcontextprotocol.io/docs/tools/debugging#debugging-in-claude-desktop)
+* MacOS / Linux:<br/>`tail -n 20 -F ~/Library/Logs/Claude/mcp*.log`
+* For bash on WSL:<br/>`tail -n 20 -f "C:\Users\YourUsername\AppData\Local\Claude\Logs\mcp.log"`
+* Powershell: <br/>`Get-Content "C:\Users\YourUsername\AppData\Local\Claude\Logs\mcp.log" -Wait -Tail 20`
 
-MacOS / Linux:
+### "Client" mode
 
-`tail -n 20 -F ~/Library/Logs/Claude/mcp*.log`
+Run the following on the command line (not from an MCP server):
 
-For bash on WSL:
+```shell
+npx -p mcp-remote@latest mcp-remote-client https://remote.mcp.server/sse
+```
 
-`tail -n 20 -f "C:\Users\YourUsername\AppData\Local\Claude\Logs\mcp.log"`
-
-or Powershell:
-
-`Get-Content "C:\Users\YourUsername\AppData\Local\Claude\Logs\mcp.log" -Wait -Tail 20`
+This will run through the entire authorization flow and attempt to list the tools & resources at the remote URL. Pair this with `--clean` or after running `rm -rf ~/.mcp-auth` to see if stale credentials are your problem, otherwise hopefully the issue will be more obvious in these logs than those in your MCP client.
