@@ -8,8 +8,8 @@ import {
   OAuthTokensSchema,
 } from '@modelcontextprotocol/sdk/shared/auth.js'
 import type { OAuthProviderOptions } from './types'
-import { getServerUrlHash, readJsonFile, writeJsonFile, readTextFile, writeTextFile, cleanServerConfig } from './mcp-auth-config'
-import { log } from './utils'
+import { readJsonFile, writeJsonFile, readTextFile, writeTextFile, cleanServerConfig } from './mcp-auth-config'
+import { getServerUrlHash, log } from './utils'
 
 /**
  * Implements the OAuthClientProvider interface for Node.js environments.

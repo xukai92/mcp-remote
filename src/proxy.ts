@@ -14,8 +14,9 @@
 
 import { EventEmitter } from 'events'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
-import { connectToRemoteServer, log, mcpProxy, parseCommandLineArgs, setupOAuthCallbackServer, setupSignalHandlers } from './lib/utils'
+import { connectToRemoteServer, log, mcpProxy, parseCommandLineArgs, setupSignalHandlers, getServerUrlHash } from './lib/utils'
 import { NodeOAuthClientProvider } from './lib/node-oauth-client-provider'
+import { coordinateAuth } from './lib/coordination'
 
 /**
  * Main function to run the proxy
@@ -23,6 +24,12 @@ import { NodeOAuthClientProvider } from './lib/node-oauth-client-provider'
 async function runProxy(serverUrl: string, callbackPort: number, clean: boolean = false) {
   // Set up event emitter for auth flow
   const events = new EventEmitter()
+
+  // Get the server URL hash for lockfile operations
+  const serverUrlHash = getServerUrlHash(serverUrl)
+
+  // Coordinate authentication with other instances
+  const { server, waitForAuthCode, skipBrowserAuth } = await coordinateAuth(serverUrlHash, callbackPort, events)
 
   // Create the OAuth client provider
   const authProvider = new NodeOAuthClientProvider({
@@ -35,16 +42,9 @@ async function runProxy(serverUrl: string, callbackPort: number, clean: boolean 
   // Create the STDIO transport for local connections
   const localTransport = new StdioServerTransport()
 
-  // Set up an HTTP server to handle OAuth callback
-  const { server, waitForAuthCode } = setupOAuthCallbackServer({
-    port: callbackPort,
-    path: '/oauth/callback',
-    events,
-  })
-
   try {
     // Connect to remote server with authentication
-    const remoteTransport = await connectToRemoteServer(serverUrl, authProvider, waitForAuthCode)
+    const remoteTransport = await connectToRemoteServer(serverUrl, authProvider, waitForAuthCode, skipBrowserAuth)
 
     // Set up bidirectional proxy between local and remote transports
     mcpProxy({
