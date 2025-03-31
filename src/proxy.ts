@@ -11,8 +11,8 @@
 
 import { EventEmitter } from 'events'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
-import { NodeOAuthClientProvider, setupOAuthCallbackServer, parseCommandLineArgs, setupSignalHandlers } from './shared.js'
-import { connectToRemoteServer, mcpProxy } from '../lib/utils.js'
+import { NodeOAuthClientProvider, setupOAuthCallbackServer, parseCommandLineArgs, setupSignalHandlers } from './shared'
+import { connectToRemoteServer, mcpProxy } from './lib/utils'
 
 /**
  * Main function to run the proxy

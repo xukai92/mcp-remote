@@ -18,7 +18,7 @@ import {
   OAuthTokens,
   OAuthTokensSchema,
 } from '@modelcontextprotocol/sdk/shared/auth.js'
-import { OAuthCallbackServerOptions, OAuthProviderOptions } from '../lib/types.js'
+import { OAuthCallbackServerOptions, OAuthProviderOptions } from './lib/types'
 
 /**
  * Implements the OAuthClientProvider interface for Node.js environments.
