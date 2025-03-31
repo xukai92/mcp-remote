@@ -4,7 +4,10 @@
  * MCP Client with OAuth support
  * A command-line client that connects to an MCP server using SSE with OAuth authentication.
  *
- * Run with: npx tsx client.ts https://example.remote/server [callback-port]
+ * Run with: npx tsx client.ts [--clean] https://example.remote/server [callback-port]
+ *
+ * Options:
+ * --clean: Deletes stored configuration before reading, ensuring a fresh session
  *
  * If callback-port is not specified, an available port will be automatically selected.
  */
@@ -14,12 +17,13 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js'
 import { ListResourcesResultSchema, ListToolsResultSchema } from '@modelcontextprotocol/sdk/types.js'
 import { UnauthorizedError } from '@modelcontextprotocol/sdk/client/auth.js'
-import { NodeOAuthClientProvider, setupOAuthCallbackServer, parseCommandLineArgs, setupSignalHandlers } from './shared.js'
+import { NodeOAuthClientProvider } from './lib/node-oauth-client-provider'
+import { parseCommandLineArgs, setupOAuthCallbackServer, setupSignalHandlers, MCP_REMOTE_VERSION } from './lib/utils'
 
 /**
  * Main function to run the client
  */
-async function runClient(serverUrl: string, callbackPort: number) {
+async function runClient(serverUrl: string, callbackPort: number, clean: boolean = false) {
   // Set up event emitter for auth flow
   const events = new EventEmitter()
 
@@ -28,18 +32,17 @@ async function runClient(serverUrl: string, callbackPort: number) {
     serverUrl,
     callbackPort,
     clientName: 'MCP CLI Client',
+    clean,
   })
 
   // Create the client
   const client = new Client(
     {
-      name: 'mcp-cli',
-      version: '0.1.0',
+      name: 'mcp-remote',
+      version: MCP_REMOTE_VERSION,
     },
     {
-      capabilities: {
-        sampling: {},
-      },
+      capabilities: {},
     },
   )
 
@@ -148,9 +151,9 @@ async function runClient(serverUrl: string, callbackPort: number) {
 }
 
 // Parse command-line arguments and run the client
-parseCommandLineArgs(process.argv.slice(2), 3333, 'Usage: npx tsx client.ts <https://server-url> [callback-port]')
-  .then(({ serverUrl, callbackPort }) => {
-    return runClient(serverUrl, callbackPort)
+parseCommandLineArgs(process.argv.slice(2), 3333, 'Usage: npx tsx client.ts [--clean] <https://server-url> [callback-port]')
+  .then(({ serverUrl, callbackPort, clean }) => {
+    return runClient(serverUrl, callbackPort, clean)
   })
   .catch((error) => {
     console.error('Fatal error:', error)

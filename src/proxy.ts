@@ -4,20 +4,23 @@
  * MCP Proxy with OAuth support
  * A bidirectional proxy between a local STDIO MCP server and a remote SSE server with OAuth authentication.
  *
- * Run with: npx tsx proxy.ts https://example.remote/server [callback-port]
+ * Run with: npx tsx proxy.ts [--clean] https://example.remote/server [callback-port]
+ *
+ * Options:
+ * --clean: Deletes stored configuration before reading, ensuring a fresh session
  *
  * If callback-port is not specified, an available port will be automatically selected.
  */
 
 import { EventEmitter } from 'events'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
-import { NodeOAuthClientProvider, setupOAuthCallbackServer, parseCommandLineArgs, setupSignalHandlers } from './shared.js'
-import { connectToRemoteServer, mcpProxy } from '../lib/utils.js'
+import { connectToRemoteServer, log, mcpProxy, parseCommandLineArgs, setupOAuthCallbackServer, setupSignalHandlers } from './lib/utils'
+import { NodeOAuthClientProvider } from './lib/node-oauth-client-provider'
 
 /**
  * Main function to run the proxy
  */
-async function runProxy(serverUrl: string, callbackPort: number) {
+async function runProxy(serverUrl: string, callbackPort: number, clean: boolean = false) {
   // Set up event emitter for auth flow
   const events = new EventEmitter()
 
@@ -26,6 +29,7 @@ async function runProxy(serverUrl: string, callbackPort: number) {
     serverUrl,
     callbackPort,
     clientName: 'MCP CLI Proxy',
+    clean,
   })
 
   // Create the STDIO transport for local connections
@@ -50,9 +54,9 @@ async function runProxy(serverUrl: string, callbackPort: number) {
 
     // Start the local STDIO server
     await localTransport.start()
-    console.error('Local STDIO server running')
-    console.error('Proxy established successfully between local STDIO and remote SSE')
-    console.error('Press Ctrl+C to exit')
+    log('Local STDIO server running')
+    log('Proxy established successfully between local STDIO and remote SSE')
+    log('Press Ctrl+C to exit')
 
     // Setup cleanup handler
     const cleanup = async () => {
@@ -62,9 +66,9 @@ async function runProxy(serverUrl: string, callbackPort: number) {
     }
     setupSignalHandlers(cleanup)
   } catch (error) {
-    console.error('Fatal error:', error)
+    log('Fatal error:', error)
     if (error instanceof Error && error.message.includes('self-signed certificate in certificate chain')) {
-      console.error(`You may be behind a VPN!
+      log(`You may be behind a VPN!
 
 If you are behind a VPN, you can try setting the NODE_EXTRA_CA_CERTS environment variable to point
 to the CA certificate file. If using claude_desktop_config.json, this might look like:
@@ -91,11 +95,11 @@ to the CA certificate file. If using claude_desktop_config.json, this might look
 }
 
 // Parse command-line arguments and run the proxy
-parseCommandLineArgs(process.argv.slice(2), 3334, 'Usage: npx tsx proxy.ts <https://server-url> [callback-port]')
-  .then(({ serverUrl, callbackPort }) => {
-    return runProxy(serverUrl, callbackPort)
+parseCommandLineArgs(process.argv.slice(2), 3334, 'Usage: npx tsx proxy.ts [--clean] <https://server-url> [callback-port]')
+  .then(({ serverUrl, callbackPort, clean }) => {
+    return runProxy(serverUrl, callbackPort, clean)
   })
   .catch((error) => {
-    console.error('Fatal error:', error)
+    log('Fatal error:', error)
     process.exit(1)
   })
