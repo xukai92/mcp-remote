@@ -8,14 +8,8 @@ import {
   OAuthTokensSchema,
 } from '@modelcontextprotocol/sdk/shared/auth.js'
 import type { OAuthProviderOptions } from './types'
-import {
-  getServerUrlHash,
-  readJsonFile,
-  writeJsonFile,
-  readTextFile,
-  writeTextFile,
-  cleanServerConfig,
-} from './mcp-auth-config'
+import { getServerUrlHash, readJsonFile, writeJsonFile, readTextFile, writeTextFile, cleanServerConfig } from './mcp-auth-config'
+import { log } from './utils'
 
 /**
  * Implements the OAuthClientProvider interface for Node.js environments.
@@ -36,11 +30,11 @@ export class NodeOAuthClientProvider implements OAuthClientProvider {
     this.callbackPath = options.callbackPath || '/oauth/callback'
     this.clientName = options.clientName || 'MCP CLI Client'
     this.clientUri = options.clientUri || 'https://github.com/modelcontextprotocol/mcp-cli'
-    
+
     // If clean flag is set, proactively clean all config files for this server
     if (options.clean) {
-      cleanServerConfig(this.serverUrlHash).catch(err => {
-        console.error('Error cleaning server config:', err)
+      cleanServerConfig(this.serverUrlHash).catch((err) => {
+        log('Error cleaning server config:', err)
       })
     }
   }
@@ -65,12 +59,7 @@ export class NodeOAuthClientProvider implements OAuthClientProvider {
    * @returns The client information or undefined
    */
   async clientInformation(): Promise<OAuthClientInformation | undefined> {
-    return readJsonFile<OAuthClientInformation>(
-      this.serverUrlHash,
-      'client_info.json',
-      OAuthClientInformationSchema,
-      this.options.clean
-    )
+    return readJsonFile<OAuthClientInformation>(this.serverUrlHash, 'client_info.json', OAuthClientInformationSchema, this.options.clean)
   }
 
   /**
@@ -86,12 +75,7 @@ export class NodeOAuthClientProvider implements OAuthClientProvider {
    * @returns The OAuth tokens or undefined
    */
   async tokens(): Promise<OAuthTokens | undefined> {
-    return readJsonFile<OAuthTokens>(
-      this.serverUrlHash, 
-      'tokens.json', 
-      OAuthTokensSchema,
-      this.options.clean
-    )
+    return readJsonFile<OAuthTokens>(this.serverUrlHash, 'tokens.json', OAuthTokensSchema, this.options.clean)
   }
 
   /**
@@ -107,12 +91,12 @@ export class NodeOAuthClientProvider implements OAuthClientProvider {
    * @param authorizationUrl The URL to redirect to
    */
   async redirectToAuthorization(authorizationUrl: URL): Promise<void> {
-    console.error(`\nPlease authorize this client by visiting:\n${authorizationUrl.toString()}\n`)
+    log(`\nPlease authorize this client by visiting:\n${authorizationUrl.toString()}\n`)
     try {
       await open(authorizationUrl.toString())
-      console.error('Browser opened automatically.')
+      log('Browser opened automatically.')
     } catch (error) {
-      console.error('Could not open browser automatically. Please copy and paste the URL above into your browser.')
+      log('Could not open browser automatically. Please copy and paste the URL above into your browser.')
     }
   }
 
@@ -129,11 +113,6 @@ export class NodeOAuthClientProvider implements OAuthClientProvider {
    * @returns The code verifier
    */
   async codeVerifier(): Promise<string> {
-    return await readTextFile(
-      this.serverUrlHash, 
-      'code_verifier.txt',
-      'No code verifier saved for session',
-      this.options.clean
-    )
+    return await readTextFile(this.serverUrlHash, 'code_verifier.txt', 'No code verifier saved for session', this.options.clean)
   }
 }

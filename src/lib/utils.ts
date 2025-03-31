@@ -6,6 +6,10 @@ import express from 'express'
 import net from 'net'
 
 const pid = process.pid
+export function log(str: string, ...rest: unknown[]) {
+  // Using stderr so that it doesn't interfere with stdout
+  console.error(`[${pid}] ${str}`, ...rest)
+}
 
 /**
  * Creates a bidirectional proxy between two transports
@@ -17,13 +21,13 @@ export function mcpProxy({ transportToClient, transportToServer }: { transportTo
 
   transportToClient.onmessage = (message) => {
     // @ts-expect-error TODO
-    console.error('[Local→Remote]', message.method || message.id)
+    log('[Local→Remote]', message.method || message.id)
     transportToServer.send(message).catch(onServerError)
   }
 
   transportToServer.onmessage = (message) => {
     // @ts-expect-error TODO: fix this type
-    console.error('[Remote→Local]', message.method || message.id)
+    log('[Remote→Local]', message.method || message.id)
     transportToClient.send(message).catch(onClientError)
   }
 
@@ -48,11 +52,11 @@ export function mcpProxy({ transportToClient, transportToServer }: { transportTo
   transportToServer.onerror = onServerError
 
   function onClientError(error: Error) {
-    console.error('Error from local client:', error)
+    log('Error from local client:', error)
   }
 
   function onServerError(error: Error) {
-    console.error('Error from remote server:', error)
+    log('Error from remote server:', error)
   }
 }
 
@@ -68,36 +72,36 @@ export async function connectToRemoteServer(
   authProvider: OAuthClientProvider,
   waitForAuthCode: () => Promise<string>,
 ): Promise<SSEClientTransport> {
-  console.error(`[${pid}] Connecting to remote server: ${serverUrl}`)
+  log(`[${pid}] Connecting to remote server: ${serverUrl}`)
   const url = new URL(serverUrl)
   const transport = new SSEClientTransport(url, { authProvider })
 
   try {
     await transport.start()
-    console.error('Connected to remote server')
+    log('Connected to remote server')
     return transport
   } catch (error) {
     if (error instanceof UnauthorizedError || (error instanceof Error && error.message.includes('Unauthorized'))) {
-      console.error('Authentication required. Waiting for authorization...')
+      log('Authentication required. Waiting for authorization...')
 
       // Wait for the authorization code from the callback
       const code = await waitForAuthCode()
 
       try {
-        console.error('Completing authorization...')
+        log('Completing authorization...')
         await transport.finishAuth(code)
 
         // Create a new transport after auth
         const newTransport = new SSEClientTransport(url, { authProvider })
         await newTransport.start()
-        console.error('Connected to remote server after authentication')
+        log('Connected to remote server after authentication')
         return newTransport
       } catch (authError) {
-        console.error('Authorization error:', authError)
+        log('Authorization error:', authError)
         throw authError
       }
     } else {
-      console.error('Connection error:', error)
+      log('Connection error:', error)
       throw error
     }
   }
@@ -127,7 +131,7 @@ export function setupOAuthCallbackServer(options: OAuthCallbackServerOptions) {
   })
 
   const server = app.listen(options.port, () => {
-    console.error(`OAuth callback server running at http://127.0.0.1:${options.port}`)
+    log(`OAuth callback server running at http://127.0.0.1:${options.port}`)
   })
 
   /**
@@ -201,7 +205,7 @@ export async function parseCommandLineArgs(args: string[], defaultPort: number, 
   const specifiedPort = args[1] ? parseInt(args[1]) : undefined
 
   if (!serverUrl) {
-    console.error(usage)
+    log(usage)
     process.exit(1)
   }
 
@@ -209,7 +213,7 @@ export async function parseCommandLineArgs(args: string[], defaultPort: number, 
   const isLocalhost = (url.hostname === 'localhost' || url.hostname === '127.0.0.1') && url.protocol === 'http:'
 
   if (!(url.protocol == 'https:' || isLocalhost)) {
-    console.error(usage)
+    log(usage)
     process.exit(1)
   }
 
@@ -217,13 +221,13 @@ export async function parseCommandLineArgs(args: string[], defaultPort: number, 
   const callbackPort = specifiedPort || (await findAvailablePort(defaultPort))
 
   if (specifiedPort) {
-    console.error(`Using specified callback port: ${callbackPort}`)
+    log(`Using specified callback port: ${callbackPort}`)
   } else {
-    console.error(`Using automatically selected callback port: ${callbackPort}`)
+    log(`Using automatically selected callback port: ${callbackPort}`)
   }
 
   if (clean) {
-    console.error('Clean mode enabled: config files will be reset before reading')
+    log('Clean mode enabled: config files will be reset before reading')
   }
 
   return { serverUrl, callbackPort, clean }
@@ -235,7 +239,7 @@ export async function parseCommandLineArgs(args: string[], defaultPort: number, 
  */
 export function setupSignalHandlers(cleanup: () => Promise<void>) {
   process.on('SIGINT', async () => {
-    console.error('\nShutting down...')
+    log('\nShutting down...')
     await cleanup()
     process.exit(0)
   })

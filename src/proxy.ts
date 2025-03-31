@@ -14,7 +14,7 @@
 
 import { EventEmitter } from 'events'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
-import { connectToRemoteServer, mcpProxy, parseCommandLineArgs, setupOAuthCallbackServer, setupSignalHandlers } from './lib/utils'
+import { connectToRemoteServer, log, mcpProxy, parseCommandLineArgs, setupOAuthCallbackServer, setupSignalHandlers } from './lib/utils'
 import { NodeOAuthClientProvider } from './lib/node-oauth-client-provider'
 
 /**
@@ -54,9 +54,9 @@ async function runProxy(serverUrl: string, callbackPort: number, clean: boolean 
 
     // Start the local STDIO server
     await localTransport.start()
-    console.error('Local STDIO server running')
-    console.error('Proxy established successfully between local STDIO and remote SSE')
-    console.error('Press Ctrl+C to exit')
+    log('Local STDIO server running')
+    log('Proxy established successfully between local STDIO and remote SSE')
+    log('Press Ctrl+C to exit')
 
     // Setup cleanup handler
     const cleanup = async () => {
@@ -66,9 +66,9 @@ async function runProxy(serverUrl: string, callbackPort: number, clean: boolean 
     }
     setupSignalHandlers(cleanup)
   } catch (error) {
-    console.error('Fatal error:', error)
+    log('Fatal error:', error)
     if (error instanceof Error && error.message.includes('self-signed certificate in certificate chain')) {
-      console.error(`You may be behind a VPN!
+      log(`You may be behind a VPN!
 
 If you are behind a VPN, you can try setting the NODE_EXTRA_CA_CERTS environment variable to point
 to the CA certificate file. If using claude_desktop_config.json, this might look like:
@@ -100,6 +100,6 @@ parseCommandLineArgs(process.argv.slice(2), 3334, 'Usage: npx tsx proxy.ts [--cl
     return runProxy(serverUrl, callbackPort, clean)
   })
   .catch((error) => {
-    console.error('Fatal error:', error)
+    log('Fatal error:', error)
     process.exit(1)
   })

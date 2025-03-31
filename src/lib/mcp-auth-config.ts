@@ -2,7 +2,7 @@ import crypto from 'crypto'
 import path from 'path'
 import os from 'os'
 import fs from 'fs/promises'
-import { MCP_REMOTE_VERSION } from './utils'
+import { log, MCP_REMOTE_VERSION } from './utils'
 
 /**
  * MCP Remote Authentication Configuration
@@ -34,7 +34,7 @@ export const knownConfigFiles = ['client_info.json', 'tokens.json', 'code_verifi
  * @param serverUrlHash The hash of the server URL
  */
 export async function cleanServerConfig(serverUrlHash: string): Promise<void> {
-  console.error(`Cleaning configuration files for server: ${serverUrlHash}`)
+  log(`Cleaning configuration files for server: ${serverUrlHash}`)
   for (const filename of knownConfigFiles) {
     await deleteConfigFile(serverUrlHash, filename)
   }
@@ -58,7 +58,7 @@ export async function ensureConfigDir(): Promise<void> {
     const configDir = getConfigDir()
     await fs.mkdir(configDir, { recursive: true })
   } catch (error) {
-    console.error('Error creating config directory:', error)
+    log('Error creating config directory:', error)
     throw error
   }
 }
@@ -95,7 +95,7 @@ export async function deleteConfigFile(serverUrlHash: string, filename: string):
   } catch (error) {
     // Ignore if file doesn't exist
     if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
-      console.error(`Error deleting ${filename}:`, error)
+      log(`Error deleting ${filename}:`, error)
     }
   }
 }
@@ -146,7 +146,7 @@ export async function writeJsonFile(serverUrlHash: string, filename: string, dat
     const filePath = getConfigFilePath(serverUrlHash, filename)
     await fs.writeFile(filePath, JSON.stringify(data, null, 2), 'utf-8')
   } catch (error) {
-    console.error(`Error writing ${filename}:`, error)
+    log(`Error writing ${filename}:`, error)
     throw error
   }
 }
@@ -193,7 +193,7 @@ export async function writeTextFile(serverUrlHash: string, filename: string, tex
     const filePath = getConfigFilePath(serverUrlHash, filename)
     await fs.writeFile(filePath, text, 'utf-8')
   } catch (error) {
-    console.error(`Error writing ${filename}:`, error)
+    log(`Error writing ${filename}:`, error)
     throw error
   }
 }
