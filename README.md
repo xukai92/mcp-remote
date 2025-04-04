@@ -130,7 +130,7 @@ Then restarting your MCP client.
 
 ### Check your Node version
 
-Make sure that the version of Node you have installed is [16 or 
+Make sure that the version of Node you have installed is [18 or 
 higher](https://modelcontextprotocol.io/quickstart/server). Claude
 Desktop will use your system version of Node, even if you have a newer
 version installed elsewhere.
