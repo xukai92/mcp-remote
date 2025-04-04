@@ -76,7 +76,7 @@ export async function waitForAuthentication(port: number): Promise<boolean> {
       } else if (response.status === 202) {
         // Continue polling
         log(`Authentication still in progress`)
-        await new Promise(resolve => setTimeout(resolve, 1000))
+        await new Promise((resolve) => setTimeout(resolve, 1000))
       } else {
         log(`Unexpected response status: ${response.status}`)
         return false
@@ -100,8 +100,8 @@ export async function coordinateAuth(
   callbackPort: number,
   events: EventEmitter,
 ): Promise<{ server: Server; waitForAuthCode: () => Promise<string>; skipBrowserAuth: boolean }> {
-  // Check for a lockfile
-  const lockData = await checkLockfile(serverUrlHash)
+  // Check for a lockfile (disabled on Windows for the time being)
+  const lockData = process.platform === 'win32' ? null : await checkLockfile(serverUrlHash)
 
   // If there's a valid lockfile, try to use the existing auth process
   if (lockData && (await isLockValid(lockData))) {
@@ -115,7 +115,7 @@ export async function coordinateAuth(
 
         // Setup a dummy server - the client will use tokens directly from disk
         const dummyServer = express().listen(0) // Listen on any available port
-        
+
         // This shouldn't actually be called in normal operation, but provide it for API compatibility
         const dummyWaitForAuthCode = () => {
           log('WARNING: waitForAuthCode called in secondary instance - this is unexpected')
@@ -183,6 +183,6 @@ export async function coordinateAuth(
   return {
     server,
     waitForAuthCode,
-    skipBrowserAuth: false
+    skipBrowserAuth: false,
   }
 }
