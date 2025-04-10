@@ -1,6 +1,6 @@
 {
   "name": "mcp-remote",
-  "version": "0.0.16",
+  "version": "0.0.17",
   "description": "Remote proxy for Model Context Protocol, allowing local-only clients to connect to remote servers using oAuth",
   "keywords": [
     "mcp",
@@ -23,8 +23,8 @@
     "mcp-remote-client": "dist/client.js"
   },
   "scripts": {
-    "dev": "tsup --watch",
     "build": "tsup",
+    "build:watch": "tsup --watch",
     "check": "prettier --check . && tsc"
   },
   "dependencies": {

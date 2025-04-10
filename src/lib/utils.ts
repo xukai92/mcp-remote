@@ -68,6 +68,7 @@ export function mcpProxy({ transportToClient, transportToServer }: { transportTo
  * Creates and connects to a remote SSE server with OAuth authentication
  * @param serverUrl The URL of the remote server
  * @param authProvider The OAuth client provider
+ * @param headers Additional headers to send with the request
  * @param waitForAuthCode Function to wait for the auth code
  * @param skipBrowserAuth Whether to skip browser auth and use shared auth
  * @returns The connected SSE client transport
@@ -75,12 +76,13 @@ export function mcpProxy({ transportToClient, transportToServer }: { transportTo
 export async function connectToRemoteServer(
   serverUrl: string,
   authProvider: OAuthClientProvider,
+  headers: Record<string, string>,
   waitForAuthCode: () => Promise<string>,
   skipBrowserAuth: boolean = false,
 ): Promise<SSEClientTransport> {
   log(`[${pid}] Connecting to remote server: ${serverUrl}`)
   const url = new URL(serverUrl)
-  const transport = new SSEClientTransport(url, { authProvider })
+  const transport = new SSEClientTransport(url, { authProvider, requestInit: { headers } })
 
   try {
     await transport.start()
@@ -102,7 +104,7 @@ export async function connectToRemoteServer(
         await transport.finishAuth(code)
 
         // Create a new transport after auth
-        const newTransport = new SSEClientTransport(url, { authProvider })
+        const newTransport = new SSEClientTransport(url, { authProvider, requestInit: { headers } })
         await newTransport.start()
         log('Connected to remote server after authentication')
         return newTransport
@@ -255,7 +257,7 @@ export async function findAvailablePort(preferredPort?: number): Promise<number>
  * @param args Command line arguments
  * @param defaultPort Default port for the callback server if specified port is unavailable
  * @param usage Usage message to show on error
- * @returns A promise that resolves to an object with parsed serverUrl, callbackPort, and clean flag
+ * @returns A promise that resolves to an object with parsed serverUrl, callbackPort, clean flag, and headers
  */
 export async function parseCommandLineArgs(args: string[], defaultPort: number, usage: string) {
   // Check for --clean flag
@@ -266,6 +268,21 @@ export async function parseCommandLineArgs(args: string[], defaultPort: number, 
   if (clean) {
     args.splice(cleanIndex, 1)
   }
+
+  // Process headers
+  const headers: Record<string, string> = {}
+  args.forEach((arg, i) => {
+    if (arg === '--header' && i < args.length - 1) {
+      const value = args[i + 1]
+      const match = value.match(/^([A-Za-z0-9_-]+):(.*)$/)
+      if (match) {
+        headers[match[1]] = match[2]
+      } else {
+        log(`Warning: ignoring invalid header argument: ${value}`)
+      }
+      args.splice(i, 2)
+    }
+  })
 
   const serverUrl = args[0]
   const specifiedPort = args[1] ? parseInt(args[1]) : undefined
@@ -296,7 +313,26 @@ export async function parseCommandLineArgs(args: string[], defaultPort: number, 
     log('Clean mode enabled: config files will be reset before reading')
   }
 
-  return { serverUrl, callbackPort, clean }
+  if (Object.keys(headers).length > 0) {
+    log(`Using custom headers: ${JSON.stringify(headers)}`)
+  }
+  // Replace environment variables in headers
+  // example `Authorization: Bearer ${TOKEN}` will read process.env.TOKEN
+  for (const [key, value] of Object.entries(headers)) {
+    headers[key] = value.replace(/\$\{([^}]+)}/g, (match, envVarName) => {
+      const envVarValue = process.env[envVarName]
+
+      if (envVarValue !== undefined) {
+        log(`Replacing ${match} with environment value in header '${key}'`)
+        return envVarValue
+      } else {
+        log(`Warning: Environment variable '${envVarName}' not found for header '${key}'.`)
+        return ''
+      }
+    })
+  }
+
+  return { serverUrl, callbackPort, clean, headers }
 }
 
 /**
