@@ -23,8 +23,8 @@
     "mcp-remote-client": "dist/client.js"
   },
   "scripts": {
-    "dev": "tsup --watch",
     "build": "tsup",
+    "build:watch": "tsup --watch",
     "check": "prettier --check . && tsc"
   },
   "dependencies": {

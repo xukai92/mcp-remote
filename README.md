@@ -32,6 +32,29 @@ All the most popular MCP clients (Claude Desktop, Cursor & Windsurf) use the fol
 }
 ```
 
+### Custom Headers
+
+To bypass authentication, or to emit custom headers on all requests to your remote server, pass `--header` CLI arguments:
+
+```json
+{
+  "mcpServers": {
+    "remote-example": {
+      "command": "npx",
+      "args": [
+        "mcp-remote",
+        "https://remote.mcp.server/sse",
+        "--header",
+        "Authorization: Bearer ${AUTH_TOKEN}"
+      ]
+    },
+    "env": {
+      "AUTH_TOKEN": "..."
+    }
+  }
+}
+```
+
 ### Flags
 
 * If `npx` is producing errors, consider adding `-y` as the first argument to auto-accept the installation of the `mcp-remote` package.

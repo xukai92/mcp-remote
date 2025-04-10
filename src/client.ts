@@ -24,7 +24,7 @@ import { coordinateAuth } from './lib/coordination'
 /**
  * Main function to run the client
  */
-async function runClient(serverUrl: string, callbackPort: number, clean: boolean = false) {
+async function runClient(serverUrl: string, callbackPort: number, headers: Record<string, string>, clean: boolean = false) {
   // Set up event emitter for auth flow
   const events = new EventEmitter()
 
@@ -64,7 +64,7 @@ async function runClient(serverUrl: string, callbackPort: number, clean: boolean
   // Create the transport factory
   const url = new URL(serverUrl)
   function initTransport() {
-    const transport = new SSEClientTransport(url, { authProvider })
+    const transport = new SSEClientTransport(url, { authProvider, requestInit: { headers } })
 
     // Set up message and error handlers
     transport.onmessage = (message) => {
@@ -160,8 +160,8 @@ async function runClient(serverUrl: string, callbackPort: number, clean: boolean
 
 // Parse command-line arguments and run the client
 parseCommandLineArgs(process.argv.slice(2), 3333, 'Usage: npx tsx client.ts [--clean] <https://server-url> [callback-port]')
-  .then(({ serverUrl, callbackPort, clean }) => {
-    return runClient(serverUrl, callbackPort, clean)
+  .then(({ serverUrl, callbackPort, clean, headers }) => {
+    return runClient(serverUrl, callbackPort, headers, clean)
   })
   .catch((error) => {
     console.error('Fatal error:', error)
