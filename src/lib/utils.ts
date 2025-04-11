@@ -26,12 +26,16 @@ export function mcpProxy({ transportToClient, transportToServer }: { transportTo
   transportToClient.onmessage = (message) => {
     // @ts-expect-error TODO
     log('[Local→Remote]', message.method || message.id)
+    // Log full outgoing request details
+    log('[Local→Remote Full]', JSON.stringify(message, null, 2))
     transportToServer.send(message).catch(onServerError)
   }
 
   transportToServer.onmessage = (message) => {
     // @ts-expect-error TODO: fix this type
     log('[Remote→Local]', message.method || message.id)
+    // Log full response details
+    log('[Remote→Local Full]', JSON.stringify(message, null, 2))
     transportToClient.send(message).catch(onClientError)
   }
 
@@ -82,7 +86,25 @@ export async function connectToRemoteServer(
 ): Promise<SSEClientTransport> {
   log(`[${pid}] Connecting to remote server: ${serverUrl}`)
   const url = new URL(serverUrl)
-  const transport = new SSEClientTransport(url, { authProvider, requestInit: { headers } })
+
+  // Create transport with eventSourceInit to pass Authorization header if present
+  const eventSourceInit = {
+    fetch: (url: string | URL, init: RequestInit | undefined) => {
+      return fetch(url, {
+        ...init,
+        headers: {
+          ...init?.headers,
+          ...headers,
+        },
+      })
+    },
+  }
+
+  const transport = new SSEClientTransport(url, {
+    authProvider,
+    requestInit: { headers },
+    eventSourceInit,
+  })
 
   try {
     await transport.start()
