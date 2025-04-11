@@ -26,16 +26,12 @@ export function mcpProxy({ transportToClient, transportToServer }: { transportTo
   transportToClient.onmessage = (message) => {
     // @ts-expect-error TODO
     log('[Local→Remote]', message.method || message.id)
-    // Log full outgoing request details
-    log('[Local→Remote Full]', JSON.stringify(message, null, 2))
     transportToServer.send(message).catch(onServerError)
   }
 
   transportToServer.onmessage = (message) => {
     // @ts-expect-error TODO: fix this type
     log('[Remote→Local]', message.method || message.id)
-    // Log full response details
-    log('[Remote→Local Full]', JSON.stringify(message, null, 2))
     transportToClient.send(message).catch(onClientError)
   }
 
