@@ -275,18 +275,9 @@ export async function findAvailablePort(preferredPort?: number): Promise<number>
  * @param args Command line arguments
  * @param defaultPort Default port for the callback server if specified port is unavailable
  * @param usage Usage message to show on error
- * @returns A promise that resolves to an object with parsed serverUrl, callbackPort, clean flag, and headers
+ * @returns A promise that resolves to an object with parsed serverUrl, callbackPort and headers
  */
 export async function parseCommandLineArgs(args: string[], defaultPort: number, usage: string) {
-  // Check for --clean flag
-  const cleanIndex = args.indexOf('--clean')
-  const clean = cleanIndex !== -1
-
-  // Remove the flag from args if it exists
-  if (clean) {
-    args.splice(cleanIndex, 1)
-  }
-
   // Process headers
   const headers: Record<string, string> = {}
   args.forEach((arg, i) => {
@@ -327,10 +318,6 @@ export async function parseCommandLineArgs(args: string[], defaultPort: number, 
     log(`Using automatically selected callback port: ${callbackPort}`)
   }
 
-  if (clean) {
-    log('Clean mode enabled: config files will be reset before reading')
-  }
-
   if (Object.keys(headers).length > 0) {
     log(`Using custom headers: ${JSON.stringify(headers)}`)
   }
@@ -350,7 +337,7 @@ export async function parseCommandLineArgs(args: string[], defaultPort: number, 
     })
   }
 
-  return { serverUrl, callbackPort, clean, headers }
+  return { serverUrl, callbackPort, headers }
 }
 
 /**

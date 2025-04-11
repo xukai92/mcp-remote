@@ -77,16 +77,6 @@ To bypass authentication, or to emit custom headers on all requests to your remo
       ]
 ```
 
-* To force `mcp-remote` to ignore any existing access tokens and begin the authorization flow anew, pass `--clean`.
-
-```json
-      "args": [
-        "mcp-remote",
-        "https://remote.mcp.server/sse",
-        "--clean"
-      ]
-```
-
 * To change which port `mcp-remote` listens for an OAuth redirect (by default `3334`), add an additional argument after the server URL. Note that whatever port you specify, if it is unavailable an open port will be chosen at random.
 
 ```json
@@ -211,4 +201,4 @@ Run the following on the command line (not from an MCP server):
 npx -p mcp-remote@latest mcp-remote-client https://remote.mcp.server/sse
 ```
 
-This will run through the entire authorization flow and attempt to list the tools & resources at the remote URL. Pair this with `--clean` or after running `rm -rf ~/.mcp-auth` to see if stale credentials are your problem, otherwise hopefully the issue will be more obvious in these logs than those in your MCP client.
+This will run through the entire authorization flow and attempt to list the tools & resources at the remote URL. Try this after running `rm -rf ~/.mcp-auth` to see if stale credentials are your problem, otherwise hopefully the issue will be more obvious in these logs than those in your MCP client.

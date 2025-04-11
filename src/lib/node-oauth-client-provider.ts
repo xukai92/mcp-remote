@@ -8,7 +8,7 @@ import {
   OAuthTokensSchema,
 } from '@modelcontextprotocol/sdk/shared/auth.js'
 import type { OAuthProviderOptions } from './types'
-import { readJsonFile, writeJsonFile, readTextFile, writeTextFile, cleanServerConfig } from './mcp-auth-config'
+import { readJsonFile, writeJsonFile, readTextFile, writeTextFile } from './mcp-auth-config'
 import { getServerUrlHash, log } from './utils'
 
 /**
@@ -30,13 +30,6 @@ export class NodeOAuthClientProvider implements OAuthClientProvider {
     this.callbackPath = options.callbackPath || '/oauth/callback'
     this.clientName = options.clientName || 'MCP CLI Client'
     this.clientUri = options.clientUri || 'https://github.com/modelcontextprotocol/mcp-cli'
-
-    // If clean flag is set, proactively clean all config files for this server
-    if (options.clean) {
-      cleanServerConfig(this.serverUrlHash).catch((err) => {
-        log('Error cleaning server config:', err)
-      })
-    }
   }
 
   get redirectUrl(): string {
@@ -60,7 +53,7 @@ export class NodeOAuthClientProvider implements OAuthClientProvider {
    */
   async clientInformation(): Promise<OAuthClientInformation | undefined> {
     // log('Reading client info')
-    return readJsonFile<OAuthClientInformation>(this.serverUrlHash, 'client_info.json', OAuthClientInformationSchema, this.options.clean)
+    return readJsonFile<OAuthClientInformation>(this.serverUrlHash, 'client_info.json', OAuthClientInformationSchema)
   }
 
   /**
@@ -79,7 +72,7 @@ export class NodeOAuthClientProvider implements OAuthClientProvider {
   async tokens(): Promise<OAuthTokens | undefined> {
     // log('Reading tokens')
     // console.log(new Error().stack)
-    return readJsonFile<OAuthTokens>(this.serverUrlHash, 'tokens.json', OAuthTokensSchema, this.options.clean)
+    return readJsonFile<OAuthTokens>(this.serverUrlHash, 'tokens.json', OAuthTokensSchema)
   }
 
   /**
@@ -120,6 +113,6 @@ export class NodeOAuthClientProvider implements OAuthClientProvider {
    */
   async codeVerifier(): Promise<string> {
     // log('Reading code verifier')
-    return await readTextFile(this.serverUrlHash, 'code_verifier.txt', 'No code verifier saved for session', this.options.clean)
+    return await readTextFile(this.serverUrlHash, 'code_verifier.txt', 'No code verifier saved for session')
   }
 }

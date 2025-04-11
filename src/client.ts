@@ -4,10 +4,7 @@
  * MCP Client with OAuth support
  * A command-line client that connects to an MCP server using SSE with OAuth authentication.
  *
- * Run with: npx tsx client.ts [--clean] https://example.remote/server [callback-port]
- *
- * Options:
- * --clean: Deletes stored configuration before reading, ensuring a fresh session
+ * Run with: npx tsx client.ts https://example.remote/server [callback-port]
  *
  * If callback-port is not specified, an available port will be automatically selected.
  */
@@ -24,7 +21,7 @@ import { coordinateAuth } from './lib/coordination'
 /**
  * Main function to run the client
  */
-async function runClient(serverUrl: string, callbackPort: number, headers: Record<string, string>, clean: boolean = false) {
+async function runClient(serverUrl: string, callbackPort: number, headers: Record<string, string>) {
   // Set up event emitter for auth flow
   const events = new EventEmitter()
 
@@ -39,7 +36,6 @@ async function runClient(serverUrl: string, callbackPort: number, headers: Recor
     serverUrl,
     callbackPort,
     clientName: 'MCP CLI Client',
-    clean,
   })
 
   // If auth was completed by another instance, just log that we'll use the auth from disk
@@ -159,9 +155,9 @@ async function runClient(serverUrl: string, callbackPort: number, headers: Recor
 }
 
 // Parse command-line arguments and run the client
-parseCommandLineArgs(process.argv.slice(2), 3333, 'Usage: npx tsx client.ts [--clean] <https://server-url> [callback-port]')
-  .then(({ serverUrl, callbackPort, clean, headers }) => {
-    return runClient(serverUrl, callbackPort, headers, clean)
+parseCommandLineArgs(process.argv.slice(2), 3333, 'Usage: npx tsx client.ts <https://server-url> [callback-port]')
+  .then(({ serverUrl, callbackPort, headers }) => {
+    return runClient(serverUrl, callbackPort, headers)
   })
   .catch((error) => {
     console.error('Fatal error:', error)

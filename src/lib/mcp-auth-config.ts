@@ -24,11 +24,6 @@ import { log, MCP_REMOTE_VERSION } from './utils'
  */
 
 /**
- * Known configuration file names that might need to be cleaned
- */
-export const knownConfigFiles = ['client_info.json', 'tokens.json', 'code_verifier.txt', 'lock.json']
-
-/**
  * Lockfile data structure
  */
 export interface LockfileData {
@@ -80,17 +75,6 @@ export async function checkLockfile(serverUrlHash: string): Promise<LockfileData
  */
 export async function deleteLockfile(serverUrlHash: string): Promise<void> {
   await deleteConfigFile(serverUrlHash, 'lock.json')
-}
-
-/**
- * Deletes all known configuration files for a specific server
- * @param serverUrlHash The hash of the server URL
- */
-export async function cleanServerConfig(serverUrlHash: string): Promise<void> {
-  log(`Cleaning configuration files for server: ${serverUrlHash}`)
-  for (const filename of knownConfigFiles) {
-    await deleteConfigFile(serverUrlHash, filename)
-  }
 }
 
 /**
@@ -149,23 +133,11 @@ export async function deleteConfigFile(serverUrlHash: string, filename: string):
  * @param serverUrlHash The hash of the server URL
  * @param filename The name of the file to read
  * @param schema The schema to validate against
- * @param clean Whether to clean (delete) before reading
  * @returns The parsed file content or undefined if the file doesn't exist
  */
-export async function readJsonFile<T>(
-  serverUrlHash: string,
-  filename: string,
-  schema: any,
-  clean: boolean = false,
-): Promise<T | undefined> {
+export async function readJsonFile<T>(serverUrlHash: string, filename: string, schema: any): Promise<T | undefined> {
   try {
     await ensureConfigDir()
-
-    // If clean flag is set, delete the file before trying to read it
-    if (clean) {
-      await deleteConfigFile(serverUrlHash, filename)
-      return undefined
-    }
 
     const filePath = getConfigFilePath(serverUrlHash, filename)
     const content = await fs.readFile(filePath, 'utf-8')
@@ -204,24 +176,11 @@ export async function writeJsonFile(serverUrlHash: string, filename: string, dat
  * @param serverUrlHash The hash of the server URL
  * @param filename The name of the file to read
  * @param errorMessage Optional custom error message
- * @param clean Whether to clean (delete) before reading
  * @returns The file content as a string
  */
-export async function readTextFile(
-  serverUrlHash: string,
-  filename: string,
-  errorMessage?: string,
-  clean: boolean = false,
-): Promise<string> {
+export async function readTextFile(serverUrlHash: string, filename: string, errorMessage?: string): Promise<string> {
   try {
     await ensureConfigDir()
-
-    // If clean flag is set, delete the file before trying to read it
-    if (clean) {
-      await deleteConfigFile(serverUrlHash, filename)
-      throw new Error('File deleted due to clean flag')
-    }
-
     const filePath = getConfigFilePath(serverUrlHash, filename)
     return await fs.readFile(filePath, 'utf-8')
   } catch (error) {
