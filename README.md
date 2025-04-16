@@ -55,6 +55,23 @@ To bypass authentication, or to emit custom headers on all requests to your remo
 }
 ```
 
+**Note:** Cursor has a bug where spaces inside `args` aren't escaped when it invokes `npx`, which ends up mangling these values. You can work around it using:
+
+```jsonc
+{
+  // rest of config...
+  "args": [
+    "mcp-remote",
+    "https://remote.mcp.server/sse",
+    "--header",
+    "Authorization:${AUTH_HEADER}" // note no spaces around ':'
+  ]
+},
+"env": {
+  "AUTH_HEADER": "Bearer <auth-token>" // spaces OK in env vars
+}
+```
+
 ### Flags
 
 * If `npx` is producing errors, consider adding `-y` as the first argument to auto-accept the installation of the `mcp-remote` package.
