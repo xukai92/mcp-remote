@@ -11,22 +11,36 @@
 
 import { EventEmitter } from 'events'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
-import { connectToRemoteServer, log, mcpProxy, parseCommandLineArgs, setupSignalHandlers, getServerUrlHash } from './lib/utils'
+import {
+  connectToRemoteServer,
+  log,
+  mcpProxy,
+  parseCommandLineArgs,
+  setupSignalHandlers,
+  getServerUrlHash,
+  MCP_REMOTE_VERSION,
+  TransportStrategy,
+} from './lib/utils'
 import { NodeOAuthClientProvider } from './lib/node-oauth-client-provider'
-import { coordinateAuth } from './lib/coordination'
+import { createLazyAuthCoordinator } from './lib/coordination'
 
 /**
  * Main function to run the proxy
  */
-async function runProxy(serverUrl: string, callbackPort: number, headers: Record<string, string>) {
+async function runProxy(
+  serverUrl: string,
+  callbackPort: number,
+  headers: Record<string, string>,
+  transportStrategy: TransportStrategy = 'http-first',
+) {
   // Set up event emitter for auth flow
   const events = new EventEmitter()
 
   // Get the server URL hash for lockfile operations
   const serverUrlHash = getServerUrlHash(serverUrl)
 
-  // Coordinate authentication with other instances
-  const { server, waitForAuthCode, skipBrowserAuth } = await coordinateAuth(serverUrlHash, callbackPort, events)
+  // Create a lazy auth coordinator
+  const authCoordinator = createLazyAuthCoordinator(serverUrlHash, callbackPort, events)
 
   // Create the OAuth client provider
   const authProvider = new NodeOAuthClientProvider({
@@ -35,20 +49,36 @@ async function runProxy(serverUrl: string, callbackPort: number, headers: Record
     clientName: 'MCP CLI Proxy',
   })
 
-  // If auth was completed by another instance, just log that we'll use the auth from disk
-  if (skipBrowserAuth) {
-    log('Authentication was completed by another instance - will use tokens from disk')
-    // TODO: remove, the callback is happening before the tokens are exchanged
-    //  so we're slightly too early
-    await new Promise((res) => setTimeout(res, 1_000))
-  }
-
   // Create the STDIO transport for local connections
   const localTransport = new StdioServerTransport()
 
+  // Keep track of the server instance for cleanup
+  let server: any = null
+
+  // Define an auth initializer function
+  const authInitializer = async () => {
+    const authState = await authCoordinator.initializeAuth()
+
+    // Store server in outer scope for cleanup
+    server = authState.server
+
+    // If auth was completed by another instance, just log that we'll use the auth from disk
+    if (authState.skipBrowserAuth) {
+      log('Authentication was completed by another instance - will use tokens from disk')
+      // TODO: remove, the callback is happening before the tokens are exchanged
+      //  so we're slightly too early
+      await new Promise((res) => setTimeout(res, 1_000))
+    }
+
+    return {
+      waitForAuthCode: authState.waitForAuthCode,
+      skipBrowserAuth: authState.skipBrowserAuth,
+    }
+  }
+
   try {
-    // Connect to remote server with authentication
-    const remoteTransport = await connectToRemoteServer(serverUrl, authProvider, headers, waitForAuthCode, skipBrowserAuth)
+    // Connect to remote server with lazy authentication
+    const remoteTransport = await connectToRemoteServer(null, serverUrl, authProvider, headers, authInitializer, transportStrategy)
 
     // Set up bidirectional proxy between local and remote transports
     mcpProxy({
@@ -59,14 +89,17 @@ async function runProxy(serverUrl: string, callbackPort: number, headers: Record
     // Start the local STDIO server
     await localTransport.start()
     log('Local STDIO server running')
-    log('Proxy established successfully between local STDIO and remote SSE')
+    log(`Proxy established successfully between local STDIO and remote ${remoteTransport.constructor.name}`)
     log('Press Ctrl+C to exit')
 
     // Setup cleanup handler
     const cleanup = async () => {
       await remoteTransport.close()
       await localTransport.close()
-      server.close()
+      // Only close the server if it was initialized
+      if (server) {
+        server.close()
+      }
     }
     setupSignalHandlers(cleanup)
   } catch (error) {
@@ -93,15 +126,18 @@ to the CA certificate file. If using claude_desktop_config.json, this might look
 }
         `)
     }
-    server.close()
+    // Only close the server if it was initialized
+    if (server) {
+      server.close()
+    }
     process.exit(1)
   }
 }
 
 // Parse command-line arguments and run the proxy
 parseCommandLineArgs(process.argv.slice(2), 3334, 'Usage: npx tsx proxy.ts <https://server-url> [callback-port]')
-  .then(({ serverUrl, callbackPort, headers }) => {
-    return runProxy(serverUrl, callbackPort, headers)
+  .then(({ serverUrl, callbackPort, headers, transportStrategy }) => {
+    return runProxy(serverUrl, callbackPort, headers, transportStrategy)
   })
   .catch((error) => {
     log('Fatal error:', error)
