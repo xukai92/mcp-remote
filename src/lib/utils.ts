@@ -130,14 +130,14 @@ export async function connectToRemoteServer(
   const sseTransport = transportStrategy === 'sse-only' || transportStrategy === 'sse-first'
   const transport = sseTransport
     ? new SSEClientTransport(url, {
-      authProvider,
-      requestInit: { headers },
-      eventSourceInit,
-    })
+        authProvider,
+        requestInit: { headers },
+        eventSourceInit,
+      })
     : new StreamableHTTPClientTransport(url, {
-      authProvider,
-      requestInit: { headers },
-    })
+        authProvider,
+        requestInit: { headers },
+      })
 
   try {
     if (client) {
@@ -300,8 +300,16 @@ export function setupOAuthCallbackServerWithLongPoll(options: OAuthCallbackServe
     log('Auth code received, resolving promise')
     authCompletedResolve(code)
 
-    res.send('Authorization successful! You may close this window and return to the CLI.' +
-             '<script>window.close();</script>')
+    res.send(`
+      Authorization successful!
+      You may close this window and return to the CLI.
+      <script>
+        // If this is a non-interactive session (no manual approval step was required) then 
+        // this should automatically close the window. If not, this will have no effect and 
+        // the user will see the message above.
+        window.close();
+      </script>
+    `)
 
     // Notify main flow that auth code is available
     options.events.emit('auth-code-received', code)
@@ -377,7 +385,7 @@ export async function findAvailablePort(preferredPort?: number): Promise<number>
 export async function parseCommandLineArgs(args: string[], defaultPort: number, usage: string) {
   // Process headers
   const headers: Record<string, string> = {}
-  let i = 0;
+  let i = 0
   while (i < args.length) {
     if (args[i] === '--header' && i < args.length - 1) {
       const value = args[i + 1]
