@@ -12,10 +12,11 @@ export const REASON_TRANSPORT_FALLBACK = 'falling-back-to-alternate-transport'
 // Transport strategy types
 export type TransportStrategy = 'sse-only' | 'http-only' | 'sse-first' | 'http-first'
 import { OAuthCallbackServerOptions } from './types'
-import { readJsonFile } from './mcp-auth-config'
+import { getConfigFilePath, readJsonFile } from './mcp-auth-config'
 import express from 'express'
 import net from 'net'
 import crypto from 'crypto'
+import fs from 'fs/promises'
 
 // Package version from package.json
 export const MCP_REMOTE_VERSION = require('../../package.json').version
@@ -459,14 +460,23 @@ export async function parseCommandLineArgs(args: string[], defaultPort: number, 
 
   // Use the specified port, or the existing client port or fallback to find an available one
   const [existingClientPort, availablePort] = await Promise.all([findExistingClientPort(serverUrl), findAvailablePort(defaultPort)])
-  const callbackPort = specifiedPort || existingClientPort || availablePort
+  let callbackPort: number
 
   if (specifiedPort) {
-    log(`Using specified callback port: ${callbackPort}`)
+    if (existingClientPort && specifiedPort !== existingClientPort) {
+      log(
+        `Warning! Specified callback port of ${specifiedPort}, which conflicts with existing client registration port ${existingClientPort}. Deleting existing client data to force reregistration.`,
+      )
+      await fs.rm(getConfigFilePath(getServerUrlHash(serverUrl), 'client_info.json'))
+    }
+    log(`Using specified callback port: ${specifiedPort}`)
+    callbackPort = specifiedPort
   } else if (existingClientPort) {
     log(`Using existing client port: ${existingClientPort}`)
+    callbackPort = existingClientPort
   } else {
-    log(`Using automatically selected callback port: ${callbackPort}`)
+    log(`Using automatically selected callback port: ${availablePort}`)
+    callbackPort = availablePort
   }
 
   if (Object.keys(headers).length > 0) {
