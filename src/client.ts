@@ -153,8 +153,8 @@ async function runClient(
 }
 
 // Parse command-line arguments and run the client
-parseCommandLineArgs(process.argv.slice(2), 'Usage: npx tsx client.ts <https://server-url> [callback-port]')
-  .then(({ serverUrl, callbackPort, headers, transportStrategy, host }) => {
+parseCommandLineArgs(process.argv.slice(2), 'Usage: npx tsx client.ts <https://server-url> [callback-port] [--debug]')
+  .then(({ serverUrl, callbackPort, headers, transportStrategy, host, debug }) => {
     return runClient(serverUrl, callbackPort, headers, transportStrategy, host)
   })
   .catch((error) => {

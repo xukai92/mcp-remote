@@ -137,8 +137,8 @@ to the CA certificate file. If using claude_desktop_config.json, this might look
 }
 
 // Parse command-line arguments and run the proxy
-parseCommandLineArgs(process.argv.slice(2), 'Usage: npx tsx proxy.ts <https://server-url> [callback-port]')
-  .then(({ serverUrl, callbackPort, headers, transportStrategy, host }) => {
+parseCommandLineArgs(process.argv.slice(2), 'Usage: npx tsx proxy.ts <https://server-url> [callback-port] [--debug]')
+  .then(({ serverUrl, callbackPort, headers, transportStrategy, host, debug }) => {
     return runProxy(serverUrl, callbackPort, headers, transportStrategy, host)
   })
   .catch((error) => {

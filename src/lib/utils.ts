@@ -10,6 +10,13 @@ import express from 'express'
 import net from 'net'
 import crypto from 'crypto'
 import fs from 'fs/promises'
+import path from 'path'
+import os from 'os'
+
+// Global type declaration for typescript
+declare global {
+  var currentServerUrlHash: string | undefined;
+}
 
 // Connection constants
 export const REASON_AUTH_NEEDED = 'authentication-needed'
@@ -22,9 +29,51 @@ export type TransportStrategy = 'sse-only' | 'http-only' | 'sse-first' | 'http-f
 export const MCP_REMOTE_VERSION = require('../../package.json').version
 
 const pid = process.pid
+// Global debug flag
+export let DEBUG = false;
+
+// Helper function for timestamp formatting
+function getTimestamp(): string {
+  const now = new Date();
+  return now.toISOString();
+}
+
+// Debug logging function
+export async function debugLog(serverUrlHash: string, message: string, ...args: any[]): Promise<void> {
+  if (!DEBUG) return;
+  
+  try {
+    // Format with timestamp and PID
+    const formattedMessage = `[${getTimestamp()}][${pid}] ${message}`;
+    
+    // Log to console
+    console.error(formattedMessage, ...args);
+    
+    // Ensure config directory exists
+    const configDir = process.env.MCP_REMOTE_CONFIG_DIR || path.join(os.homedir(), '.mcp-auth');
+    await fs.mkdir(configDir, { recursive: true });
+    
+    // Append to log file
+    const logPath = path.join(configDir, `${serverUrlHash}_debug.log`);
+    const logMessage = `${formattedMessage} ${args.map(arg => 
+      typeof arg === 'object' ? JSON.stringify(arg) : String(arg)
+    ).join(' ')}\n`;
+    
+    await fs.appendFile(logPath, logMessage, { encoding: 'utf8' });
+  } catch (error) {
+    // Fallback to console if file logging fails
+    console.error(`[DEBUG LOG ERROR] ${error}`);
+  }
+}
+
 export function log(str: string, ...rest: unknown[]) {
   // Using stderr so that it doesn't interfere with stdout
-  console.error(`[${pid}] ${str}`, ...rest)
+  console.error(`[${pid}] ${str}`, ...rest);
+  
+  // If debug mode is on, also log to debug file
+  if (DEBUG && global.currentServerUrlHash) {
+    debugLog(global.currentServerUrlHash, str, ...rest).catch(() => {});
+  }
 }
 
 /**
@@ -39,11 +88,25 @@ export function mcpProxy({ transportToClient, transportToServer }: { transportTo
     // TODO: fix types
     const message = _message as any
     log('[Local→Remote]', message.method || message.id)
+    
+    if (DEBUG) {
+      debugLog(global.currentServerUrlHash!, 'Local → Remote message', {
+        method: message.method,
+        id: message.id,
+        params: message.params ? JSON.stringify(message.params).substring(0, 500) : undefined
+      }).catch(() => {})
+    }
+    
     if (message.method === 'initialize') {
       const { clientInfo } = message.params
       if (clientInfo) clientInfo.name = `${clientInfo.name} (via mcp-remote ${MCP_REMOTE_VERSION})`
       log(JSON.stringify(message, null, 2))
+      
+      if (DEBUG) {
+        debugLog(global.currentServerUrlHash!, 'Initialize message with modified client info', { clientInfo }).catch(() => {})
+      }
     }
+    
     transportToServer.send(message).catch(onServerError)
   }
 
@@ -51,6 +114,16 @@ export function mcpProxy({ transportToClient, transportToServer }: { transportTo
     // TODO: fix types
     const message = _message as any
     log('[Remote→Local]', message.method || message.id)
+    
+    if (DEBUG) {
+      debugLog(global.currentServerUrlHash!, 'Remote → Local message', {
+        method: message.method,
+        id: message.id,
+        result: message.result ? 'result-present' : undefined,
+        error: message.error
+      }).catch(() => {})
+    }
+    
     transportToClient.send(message).catch(onClientError)
   }
 
@@ -60,6 +133,7 @@ export function mcpProxy({ transportToClient, transportToServer }: { transportTo
     }
 
     transportToClientClosed = true
+    if (DEBUG) debugLog(global.currentServerUrlHash!, 'Local transport closed, closing remote transport').catch(() => {})
     transportToServer.close().catch(onServerError)
   }
 
@@ -68,6 +142,7 @@ export function mcpProxy({ transportToClient, transportToServer }: { transportTo
       return
     }
     transportToServerClosed = true
+    if (DEBUG) debugLog(global.currentServerUrlHash!, 'Remote transport closed, closing local transport').catch(() => {})
     transportToClient.close().catch(onClientError)
   }
 
@@ -76,10 +151,12 @@ export function mcpProxy({ transportToClient, transportToServer }: { transportTo
 
   function onClientError(error: Error) {
     log('Error from local client:', error)
+    if (DEBUG) debugLog(global.currentServerUrlHash!, 'Error from local client', { errorMessage: error.message, stack: error.stack }).catch(() => {})
   }
 
   function onServerError(error: Error) {
     log('Error from remote server:', error)
+    if (DEBUG) debugLog(global.currentServerUrlHash!, 'Error from remote server', { errorMessage: error.message, stack: error.stack }).catch(() => {})
   }
 }
 
@@ -150,21 +227,27 @@ export async function connectToRemoteServer(
       })
 
   try {
+    if (DEBUG) await debugLog(global.currentServerUrlHash!, 'Attempting to connect to remote server', { sseTransport })
+    
     if (client) {
+      if (DEBUG) await debugLog(global.currentServerUrlHash!, 'Connecting client to transport')
       await client.connect(transport)
     } else {
+      if (DEBUG) await debugLog(global.currentServerUrlHash!, 'Starting transport directly')
       await transport.start()
       if (!sseTransport) {
         // Extremely hacky, but we didn't actually send a request when calling transport.start() above, so we don't
         // know if we're even talking to an HTTP server. But if we forced that now we'd get an error later saying that
         // the client is already connected. So let's just create a one-off client to make a single request and figure
         // out if we're actually talking to an HTTP server or not.
+        if (DEBUG) await debugLog(global.currentServerUrlHash!, 'Creating test transport for HTTP-only connection test')
         const testTransport = new StreamableHTTPClientTransport(url, { authProvider, requestInit: { headers } })
         const testClient = new Client({ name: 'mcp-remote-fallback-test', version: '0.0.0' }, { capabilities: {} })
         await testClient.connect(testTransport)
       }
     }
     log(`Connected to remote server using ${transport.constructor.name}`)
+    if (DEBUG) await debugLog(global.currentServerUrlHash!, `Connected to remote server successfully`, { transportType: transport.constructor.name })
 
     return transport
   } catch (error) {
@@ -203,41 +286,62 @@ export async function connectToRemoteServer(
       )
     } else if (error instanceof UnauthorizedError || (error instanceof Error && error.message.includes('Unauthorized'))) {
       log('Authentication required. Initializing auth...')
+      if (DEBUG) {
+        await debugLog(global.currentServerUrlHash!, 'Authentication required, initializing auth process', {
+          errorMessage: error.message,
+          stack: error.stack
+        })
+      }
 
       // Initialize authentication on-demand
+      if (DEBUG) await debugLog(global.currentServerUrlHash!, 'Calling authInitializer to start auth flow')
       const { waitForAuthCode, skipBrowserAuth } = await authInitializer()
 
       if (skipBrowserAuth) {
         log('Authentication required but skipping browser auth - using shared auth')
+        if (DEBUG) await debugLog(global.currentServerUrlHash!, 'Authentication required but skipping browser auth - using shared auth')
       } else {
         log('Authentication required. Waiting for authorization...')
+        if (DEBUG) await debugLog(global.currentServerUrlHash!, 'Authentication required. Waiting for authorization...')
       }
 
       // Wait for the authorization code from the callback
+      if (DEBUG) await debugLog(global.currentServerUrlHash!, 'Waiting for auth code from callback server')
       const code = await waitForAuthCode()
+      if (DEBUG) await debugLog(global.currentServerUrlHash!, 'Received auth code from callback server')
 
       try {
         log('Completing authorization...')
+        if (DEBUG) await debugLog(global.currentServerUrlHash!, 'Completing authorization with transport.finishAuth')
         await transport.finishAuth(code)
+        if (DEBUG) await debugLog(global.currentServerUrlHash!, 'Authorization completed successfully')
 
         if (recursionReasons.has(REASON_AUTH_NEEDED)) {
           const errorMessage = `Already attempted reconnection for reason: ${REASON_AUTH_NEEDED}. Giving up.`
           log(errorMessage)
+          if (DEBUG) await debugLog(global.currentServerUrlHash!, 'Already attempted auth reconnection, giving up', { recursionReasons: Array.from(recursionReasons) })
           throw new Error(errorMessage)
         }
 
         // Track this reason for recursion
         recursionReasons.add(REASON_AUTH_NEEDED)
         log(`Recursively reconnecting for reason: ${REASON_AUTH_NEEDED}`)
+        if (DEBUG) await debugLog(global.currentServerUrlHash!, 'Recursively reconnecting after auth', { recursionReasons: Array.from(recursionReasons) })
 
         // Recursively call connectToRemoteServer with the updated recursion tracking
         return connectToRemoteServer(client, serverUrl, authProvider, headers, authInitializer, transportStrategy, recursionReasons)
       } catch (authError) {
         log('Authorization error:', authError)
+        if (DEBUG) await debugLog(global.currentServerUrlHash!, 'Authorization error during finishAuth', { errorMessage: authError.message, stack: authError.stack })
         throw authError
       }
     } else {
       log('Connection error:', error)
+      if (DEBUG) await debugLog(global.currentServerUrlHash!, 'Connection error', { 
+        errorMessage: error.message, 
+        stack: error.stack,
+        transportType: transport.constructor.name
+      })
       throw error
     }
   }
@@ -435,6 +539,13 @@ export async function parseCommandLineArgs(args: string[], usage: string) {
   const serverUrl = args[0]
   const specifiedPort = args[1] ? parseInt(args[1]) : undefined
   const allowHttp = args.includes('--allow-http')
+  
+  // Check for debug flag
+  const debug = args.includes('--debug')
+  if (debug) {
+    DEBUG = true
+    log('Debug mode enabled - detailed logs will be written to ~/.mcp-auth/')
+  }
 
   // Parse transport strategy
   let transportStrategy: TransportStrategy = 'http-first' // Default
@@ -471,6 +582,14 @@ export async function parseCommandLineArgs(args: string[], usage: string) {
     process.exit(1)
   }
   const serverUrlHash = getServerUrlHash(serverUrl)
+  
+  // Set server hash globally for debug logging
+  global.currentServerUrlHash = serverUrlHash
+  
+  if (DEBUG) {
+    debugLog(serverUrlHash, `Starting mcp-remote with server URL: ${serverUrl}`).catch(() => {})
+  }
+  
   const defaultPort = calculateDefaultPort(serverUrlHash)
 
   // Use the specified port, or the existing client port or fallback to find an available one
@@ -513,7 +632,7 @@ export async function parseCommandLineArgs(args: string[], usage: string) {
     })
   }
 
-  return { serverUrl, callbackPort, headers, transportStrategy, host }
+  return { serverUrl, callbackPort, headers, transportStrategy, host, debug }
 }
 
 /**

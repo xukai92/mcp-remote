@@ -125,6 +125,16 @@ To bypass authentication, or to emit custom headers on all requests to your remo
       ]
 ```
 
+* To enable detailed debugging logs, add the `--debug` flag. This will write verbose logs to `~/.mcp-auth/{server_hash}_debug.log` with timestamps and detailed information about the auth process, connections, and token refreshing.
+
+```json
+      "args": [
+        "mcp-remote",
+        "https://remote.mcp.server/sse",
+        "--debug"
+      ]
+```
+
 ### Transport Strategies
 
 MCP Remote supports different transport strategies when connecting to an MCP server. This allows you to control whether it uses Server-Sent Events (SSE) or HTTP transport, and in what order it tries them.
@@ -238,6 +248,22 @@ this might look like:
 * Powershell: <br/>`Get-Content "C:\Users\YourUsername\AppData\Local\Claude\Logs\mcp.log" -Wait -Tail 20`
 
 ## Debugging
+
+### Debug Logs
+
+For troubleshooting complex issues, especially with token refreshing or authentication problems, use the `--debug` flag:
+
+```json
+"args": [
+  "mcp-remote",
+  "https://remote.mcp.server/sse",
+  "--debug"
+]
+```
+
+This creates detailed logs in `~/.mcp-auth/{server_hash}_debug.log` with timestamps and complete information about every step of the connection and authentication process. When you find issues with token refreshing, laptop sleep/resume issues, or auth problems, provide these logs when seeking support.
+
+### Authentication Errors
 
 If you encounter the following error, returned by the `/callback` URL:
 
