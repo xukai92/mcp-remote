@@ -88,7 +88,17 @@ export class NodeOAuthClientProvider implements OAuthClientProvider {
       if (tokens) {
         const expiresAt = new Date(tokens.expires_at)
         const now = new Date()
-        const timeLeft = Math.round((expiresAt.getTime() - now.getTime()) / 1000)
+        const expiresAtTime = expiresAt.getTime()
+        const timeLeft = !isNaN(expiresAtTime) ? Math.round((expiresAtTime - now.getTime()) / 1000) : 0
+        
+        // Alert if expires_at produces an invalid date
+        if (isNaN(expiresAtTime)) {
+          await debugLog(this.serverUrlHash, '⚠️ WARNING: Invalid expires_at detected while reading tokens ⚠️', {
+            expiresAt: tokens.expires_at,
+            tokenObject: JSON.stringify(tokens),
+            stack: new Error('Invalid expires_at timestamp').stack
+          })
+        }
         
         await debugLog(this.serverUrlHash, 'Token result:', { 
           found: true,
@@ -114,7 +124,17 @@ export class NodeOAuthClientProvider implements OAuthClientProvider {
     if (DEBUG) {
       const expiresAt = new Date(tokens.expires_at)
       const now = new Date()
-      const timeLeft = Math.round((expiresAt.getTime() - now.getTime()) / 1000)
+      const expiresAtTime = expiresAt.getTime()
+      const timeLeft = !isNaN(expiresAtTime) ? Math.round((expiresAtTime - now.getTime()) / 1000) : 0
+      
+      // Alert if expires_at produces an invalid date
+      if (isNaN(expiresAtTime)) {
+        await debugLog(this.serverUrlHash, '⚠️ WARNING: Invalid expires_at detected in tokens ⚠️', {
+          expiresAt: tokens.expires_at,
+          tokenObject: JSON.stringify(tokens),
+          stack: new Error('Invalid expires_at timestamp').stack
+        })
+      }
       
       await debugLog(this.serverUrlHash, 'Saving tokens', { 
         hasAccessToken: !!tokens.access_token,
