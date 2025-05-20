@@ -6,8 +6,9 @@ import {
   OAuthTokens,
   OAuthTokensSchema,
 } from '@modelcontextprotocol/sdk/shared/auth.js'
-import type { OAuthProviderOptions } from './types'
+import type { OAuthProviderOptions, StaticOAuthClientMetadata } from './types'
 import { readJsonFile, writeJsonFile, readTextFile, writeTextFile } from './mcp-auth-config'
+import { StaticOAuthClientInformationFull } from './types'
 import { getServerUrlHash, log, debugLog, DEBUG, MCP_REMOTE_VERSION } from './utils'
 
 /**
@@ -21,6 +22,8 @@ export class NodeOAuthClientProvider implements OAuthClientProvider {
   private clientUri: string
   private softwareId: string
   private softwareVersion: string
+  private staticOAuthClientMetadata: StaticOAuthClientMetadata
+  private staticOAuthClientInfo: StaticOAuthClientInformationFull
 
   /**
    * Creates a new NodeOAuthClientProvider
@@ -33,6 +36,8 @@ export class NodeOAuthClientProvider implements OAuthClientProvider {
     this.clientUri = options.clientUri || 'https://github.com/modelcontextprotocol/mcp-cli'
     this.softwareId = options.softwareId || '2e6dc280-f3c3-4e01-99a7-8181dbd1d23d'
     this.softwareVersion = options.softwareVersion || MCP_REMOTE_VERSION
+    this.staticOAuthClientMetadata = options.staticOAuthClientMetadata
+    this.staticOAuthClientInfo = options.staticOAuthClientInfo
   }
 
   get redirectUrl(): string {
@@ -49,6 +54,7 @@ export class NodeOAuthClientProvider implements OAuthClientProvider {
       client_uri: this.clientUri,
       software_id: this.softwareId,
       software_version: this.softwareVersion,
+      ...this.staticOAuthClientMetadata,
     }
   }
 
@@ -58,6 +64,10 @@ export class NodeOAuthClientProvider implements OAuthClientProvider {
    */
   async clientInformation(): Promise<OAuthClientInformationFull | undefined> {
     if (DEBUG) await debugLog(this.serverUrlHash, 'Reading client info')
+    if (this.staticOAuthClientInfo) {
+      if (DEBUG) await debugLog(this.serverUrlHash, 'Returning static client info')
+      return this.staticOAuthClientInfo
+    }
     const clientInfo = await readJsonFile<OAuthClientInformationFull>(this.serverUrlHash, 'client_info.json', OAuthClientInformationFullSchema)
     if (DEBUG) await debugLog(this.serverUrlHash, 'Client info result:', clientInfo ? 'Found' : 'Not found')
     return clientInfo
@@ -81,16 +91,16 @@ export class NodeOAuthClientProvider implements OAuthClientProvider {
       await debugLog(this.serverUrlHash, 'Reading OAuth tokens')
       await debugLog(this.serverUrlHash, 'Token request stack trace:', new Error().stack)
     }
-    
+
     const tokens = await readJsonFile<OAuthTokens>(this.serverUrlHash, 'tokens.json', OAuthTokensSchema)
-    
+
     if (DEBUG) {
       if (tokens) {
         const expiresAt = new Date(tokens.expires_at)
         const now = new Date()
         const expiresAtTime = expiresAt.getTime()
         const timeLeft = !isNaN(expiresAtTime) ? Math.round((expiresAtTime - now.getTime()) / 1000) : 0
-        
+
         // Alert if expires_at produces an invalid date
         if (isNaN(expiresAtTime)) {
           await debugLog(this.serverUrlHash, '⚠️ WARNING: Invalid expires_at detected while reading tokens ⚠️', {
@@ -99,8 +109,8 @@ export class NodeOAuthClientProvider implements OAuthClientProvider {
             stack: new Error('Invalid expires_at timestamp').stack
           })
         }
-        
-        await debugLog(this.serverUrlHash, 'Token result:', { 
+
+        await debugLog(this.serverUrlHash, 'Token result:', {
           found: true,
           hasAccessToken: !!tokens.access_token,
           hasRefreshToken: !!tokens.refresh_token,
@@ -112,7 +122,7 @@ export class NodeOAuthClientProvider implements OAuthClientProvider {
         await debugLog(this.serverUrlHash, 'Token result: Not found')
       }
     }
-    
+
     return tokens
   }
 
@@ -126,7 +136,7 @@ export class NodeOAuthClientProvider implements OAuthClientProvider {
       const now = new Date()
       const expiresAtTime = expiresAt.getTime()
       const timeLeft = !isNaN(expiresAtTime) ? Math.round((expiresAtTime - now.getTime()) / 1000) : 0
-      
+
       // Alert if expires_at produces an invalid date
       if (isNaN(expiresAtTime)) {
         await debugLog(this.serverUrlHash, '⚠️ WARNING: Invalid expires_at detected in tokens ⚠️', {
@@ -135,15 +145,15 @@ export class NodeOAuthClientProvider implements OAuthClientProvider {
           stack: new Error('Invalid expires_at timestamp').stack
         })
       }
-      
-      await debugLog(this.serverUrlHash, 'Saving tokens', { 
+
+      await debugLog(this.serverUrlHash, 'Saving tokens', {
         hasAccessToken: !!tokens.access_token,
         hasRefreshToken: !!tokens.refresh_token,
         expiresIn: `${timeLeft} seconds`,
         expiresAt: tokens.expires_at
       })
     }
-    
+
     await writeJsonFile(this.serverUrlHash, 'tokens.json', tokens)
   }
 
@@ -153,9 +163,9 @@ export class NodeOAuthClientProvider implements OAuthClientProvider {
    */
   async redirectToAuthorization(authorizationUrl: URL): Promise<void> {
     log(`\nPlease authorize this client by visiting:\n${authorizationUrl.toString()}\n`)
-    
+
     if (DEBUG) await debugLog(this.serverUrlHash, 'Redirecting to authorization URL', authorizationUrl.toString())
-    
+
     try {
       await open(authorizationUrl.toString())
       log('Browser opened automatically.')

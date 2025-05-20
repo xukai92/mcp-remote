@@ -4,12 +4,12 @@ import { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js'
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js'
 import { Transport } from '@modelcontextprotocol/sdk/shared/transport.js'
 import { OAuthClientInformationFull, OAuthClientInformationFullSchema } from '@modelcontextprotocol/sdk/shared/auth.js'
-import { OAuthCallbackServerOptions } from './types'
+import { OAuthCallbackServerOptions, StaticOAuthClientInformationFull, StaticOAuthClientMetadata } from './types'
 import { getConfigFilePath, readJsonFile } from './mcp-auth-config'
 import express from 'express'
 import net from 'net'
 import crypto from 'crypto'
-import fs from 'fs/promises'
+import fs, { readFile } from 'fs/promises'
 import path from 'path'
 import os from 'os'
 
@@ -41,24 +41,24 @@ function getTimestamp(): string {
 // Debug logging function
 export async function debugLog(serverUrlHash: string, message: string, ...args: any[]): Promise<void> {
   if (!DEBUG) return;
-  
+
   try {
     // Format with timestamp and PID
     const formattedMessage = `[${getTimestamp()}][${pid}] ${message}`;
-    
+
     // Log to console
     console.error(formattedMessage, ...args);
-    
+
     // Ensure config directory exists
     const configDir = process.env.MCP_REMOTE_CONFIG_DIR || path.join(os.homedir(), '.mcp-auth');
     await fs.mkdir(configDir, { recursive: true });
-    
+
     // Append to log file
     const logPath = path.join(configDir, `${serverUrlHash}_debug.log`);
     const logMessage = `${formattedMessage} ${args.map(arg => 
       typeof arg === 'object' ? JSON.stringify(arg) : String(arg)
     ).join(' ')}\n`;
-    
+
     await fs.appendFile(logPath, logMessage, { encoding: 'utf8' });
   } catch (error) {
     // Fallback to console if file logging fails
@@ -69,7 +69,7 @@ export async function debugLog(serverUrlHash: string, message: string, ...args: 
 export function log(str: string, ...rest: unknown[]) {
   // Using stderr so that it doesn't interfere with stdout
   console.error(`[${pid}] ${str}`, ...rest);
-  
+
   // If debug mode is on, also log to debug file
   if (DEBUG && global.currentServerUrlHash) {
     debugLog(global.currentServerUrlHash, str, ...rest).catch(() => {});
@@ -88,7 +88,7 @@ export function mcpProxy({ transportToClient, transportToServer }: { transportTo
     // TODO: fix types
     const message = _message as any
     log('[Local→Remote]', message.method || message.id)
-    
+
     if (DEBUG) {
       debugLog(global.currentServerUrlHash!, 'Local → Remote message', {
         method: message.method,
@@ -96,17 +96,17 @@ export function mcpProxy({ transportToClient, transportToServer }: { transportTo
         params: message.params ? JSON.stringify(message.params).substring(0, 500) : undefined
       }).catch(() => {})
     }
-    
+
     if (message.method === 'initialize') {
       const { clientInfo } = message.params
       if (clientInfo) clientInfo.name = `${clientInfo.name} (via mcp-remote ${MCP_REMOTE_VERSION})`
       log(JSON.stringify(message, null, 2))
-      
+
       if (DEBUG) {
         debugLog(global.currentServerUrlHash!, 'Initialize message with modified client info', { clientInfo }).catch(() => {})
       }
     }
-    
+
     transportToServer.send(message).catch(onServerError)
   }
 
@@ -114,7 +114,7 @@ export function mcpProxy({ transportToClient, transportToServer }: { transportTo
     // TODO: fix types
     const message = _message as any
     log('[Remote→Local]', message.method || message.id)
-    
+
     if (DEBUG) {
       debugLog(global.currentServerUrlHash!, 'Remote → Local message', {
         method: message.method,
@@ -123,7 +123,7 @@ export function mcpProxy({ transportToClient, transportToServer }: { transportTo
         error: message.error
       }).catch(() => {})
     }
-    
+
     transportToClient.send(message).catch(onClientError)
   }
 
@@ -228,7 +228,7 @@ export async function connectToRemoteServer(
 
   try {
     if (DEBUG) await debugLog(global.currentServerUrlHash!, 'Attempting to connect to remote server', { sseTransport })
-    
+
     if (client) {
       if (DEBUG) await debugLog(global.currentServerUrlHash!, 'Connecting client to transport')
       await client.connect(transport)
@@ -337,8 +337,8 @@ export async function connectToRemoteServer(
       }
     } else {
       log('Connection error:', error)
-      if (DEBUG) await debugLog(global.currentServerUrlHash!, 'Connection error', { 
-        errorMessage: error.message, 
+      if (DEBUG) await debugLog(global.currentServerUrlHash!, 'Connection error', {
+        errorMessage: error.message,
         stack: error.stack,
         transportType: transport.constructor.name
       })
@@ -418,8 +418,8 @@ export function setupOAuthCallbackServerWithLongPoll(options: OAuthCallbackServe
       Authorization successful!
       You may close this window and return to the CLI.
       <script>
-        // If this is a non-interactive session (no manual approval step was required) then 
-        // this should automatically close the window. If not, this will have no effect and 
+        // If this is a non-interactive session (no manual approval step was required) then
+        // this should automatically close the window. If not, this will have no effect and
         // the user will see the message above.
         window.close();
       </script>
@@ -539,7 +539,7 @@ export async function parseCommandLineArgs(args: string[], usage: string) {
   const serverUrl = args[0]
   const specifiedPort = args[1] ? parseInt(args[1]) : undefined
   const allowHttp = args.includes('--allow-http')
-  
+
   // Check for debug flag
   const debug = args.includes('--debug')
   if (debug) {
@@ -568,6 +568,36 @@ export async function parseCommandLineArgs(args: string[], usage: string) {
     log(`Using callback hostname: ${host}`)
   }
 
+  let staticOAuthClientMetadata: StaticOAuthClientMetadata = null
+  const staticOAuthClientMetadataIndex = args.indexOf('--static-oauth-client-metadata')
+  if (staticOAuthClientMetadataIndex !== -1 && staticOAuthClientMetadataIndex < args.length - 1) {
+    const staticOAuthClientMetadataArg = args[staticOAuthClientMetadataIndex + 1]
+    if (staticOAuthClientMetadataArg.startsWith('@')) {
+      const filePath = staticOAuthClientMetadataArg.slice(1)
+      staticOAuthClientMetadata = JSON.parse(await readFile(filePath, 'utf8'))
+      log(`Using static OAuth client metadata from file: ${filePath}`)
+    } else {
+      staticOAuthClientMetadata = JSON.parse(staticOAuthClientMetadataArg)
+      log(`Using static OAuth client metadata from string`)
+    }
+  }
+
+  // parse static OAuth client information, if provided
+  // defaults to OAuth dynamic client registration
+  let staticOAuthClientInfo: StaticOAuthClientInformationFull = null
+  const staticOAuthClientInfoIndex = args.indexOf('--static-oauth-client-info')
+  if (staticOAuthClientInfoIndex !== -1 && staticOAuthClientInfoIndex < args.length - 1) {
+    const staticOAuthClientInfoArg = args[staticOAuthClientInfoIndex + 1]
+    if (staticOAuthClientInfoArg.startsWith('@')) {
+      const filePath = staticOAuthClientInfoArg.slice(1)
+      staticOAuthClientInfo = JSON.parse(await readFile(filePath, 'utf8'))
+      log(`Using static OAuth client information from file: ${filePath}`)
+    } else {
+      staticOAuthClientInfo = JSON.parse(staticOAuthClientInfoArg)
+      log(`Using static OAuth client information from string`)
+    }
+  }
+
   if (!serverUrl) {
     log(usage)
     process.exit(1)
@@ -582,14 +612,14 @@ export async function parseCommandLineArgs(args: string[], usage: string) {
     process.exit(1)
   }
   const serverUrlHash = getServerUrlHash(serverUrl)
-  
+
   // Set server hash globally for debug logging
   global.currentServerUrlHash = serverUrlHash
-  
+
   if (DEBUG) {
     debugLog(serverUrlHash, `Starting mcp-remote with server URL: ${serverUrl}`).catch(() => {})
   }
-  
+
   const defaultPort = calculateDefaultPort(serverUrlHash)
 
   // Use the specified port, or the existing client port or fallback to find an available one
@@ -632,7 +662,7 @@ export async function parseCommandLineArgs(args: string[], usage: string) {
     })
   }
 
-  return { serverUrl, callbackPort, headers, transportStrategy, host, debug }
+  return { serverUrl, callbackPort, headers, transportStrategy, host, debug, staticOAuthClientMetadata, staticOAuthClientInfo }
 }
 
 /**
