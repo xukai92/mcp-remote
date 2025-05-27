@@ -1,14 +1,12 @@
-name: Publish Any Commit
+name: Check
+
 on:
   pull_request:
-  push:
     branches:
-      - '**'
-    tags:
-      - '!**'
+      - main
 
 jobs:
-  build:
+  check:
     runs-on: ubuntu-latest
 
     steps:
@@ -24,4 +22,5 @@ jobs:
       - name: Build
         run: pnpm build
 
-      - run: pnpm dlx pkg-pr-new publish --compact --bin
+      - name: Run checks
+        run: pnpm run check
