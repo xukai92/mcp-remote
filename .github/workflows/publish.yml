@@ -19,7 +19,6 @@ jobs:
         uses: wyvox/action-setup-pnpm@v3
         with:
           node-version: 22
-          pnpm-version: 10
 
       - name: Build
         run: pnpm build
