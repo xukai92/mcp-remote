@@ -3,6 +3,7 @@ import { EventEmitter } from 'events'
 import { Server } from 'http'
 import express from 'express'
 import { AddressInfo } from 'net'
+import { unlinkSync } from 'fs'
 import { log, debugLog, DEBUG, setupOAuthCallbackServerWithLongPoll } from './utils'
 
 export type AuthCoordinator = {
@@ -263,7 +264,7 @@ export async function coordinateAuth(
     try {
       // Synchronous version for 'exit' event since we can't use async here
       const configPath = getConfigFilePath(serverUrlHash, 'lock.json')
-      require('fs').unlinkSync(configPath)
+      unlinkSync(configPath)
       if (DEBUG) console.error(`[DEBUG] Removed lockfile on exit: ${configPath}`)
     } catch (error) {
       if (DEBUG) console.error(`[DEBUG] Error removing lockfile on exit:`, error)
