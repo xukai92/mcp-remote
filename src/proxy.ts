@@ -18,7 +18,6 @@ import {
   parseCommandLineArgs,
   setupSignalHandlers,
   getServerUrlHash,
-  MCP_REMOTE_VERSION,
   TransportStrategy,
 } from './lib/utils'
 import { StaticOAuthClientInformationFull, StaticOAuthClientMetadata } from './lib/types'
