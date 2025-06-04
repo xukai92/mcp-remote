@@ -12,8 +12,7 @@ import crypto from 'crypto'
 import fs, { readFile } from 'fs/promises'
 import path from 'path'
 import os from 'os'
-import { createRequire } from 'node:module'
-const require = createRequire(import.meta.url)
+import { version as MCP_REMOTE_VERSION } from '../../package.json'
 
 // Global type declaration for typescript
 declare global {
@@ -26,9 +25,7 @@ export const REASON_TRANSPORT_FALLBACK = 'falling-back-to-alternate-transport'
 
 // Transport strategy types
 export type TransportStrategy = 'sse-only' | 'http-only' | 'sse-first' | 'http-first'
-
-// Package version from package.json
-export const MCP_REMOTE_VERSION = require('../../package.json').version
+export { MCP_REMOTE_VERSION }
 
 const pid = process.pid
 // Global debug flag
