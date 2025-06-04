@@ -10,7 +10,7 @@ import type { OAuthProviderOptions, StaticOAuthClientMetadata } from './types'
 import { readJsonFile, writeJsonFile, readTextFile, writeTextFile } from './mcp-auth-config'
 import { StaticOAuthClientInformationFull } from './types'
 import { getServerUrlHash, log, debugLog, DEBUG, MCP_REMOTE_VERSION } from './utils'
-import { randomUUID } from "node:crypto";
+import { randomUUID } from 'node:crypto'
 
 /**
  * Implements the OAuthClientProvider interface for Node.js environments.
@@ -62,7 +62,7 @@ export class NodeOAuthClientProvider implements OAuthClientProvider {
   }
 
   state(): string {
-    return this._state;
+    return this._state
   }
 
   /**
