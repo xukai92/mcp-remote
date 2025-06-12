@@ -35,6 +35,8 @@ async function runProxy(
   host: string,
   staticOAuthClientMetadata: StaticOAuthClientMetadata,
   staticOAuthClientInfo: StaticOAuthClientInformationFull,
+  toolPrefix?: string,
+  toolFilter?: string[],
 ) {
   // Set up event emitter for auth flow
   const events = new EventEmitter()
@@ -90,6 +92,8 @@ async function runProxy(
     mcpProxy({
       transportToClient: localTransport,
       transportToServer: remoteTransport,
+      toolPrefix,
+      toolFilter,
     })
 
     // Start the local STDIO server
@@ -141,10 +145,36 @@ to the CA certificate file. If using claude_desktop_config.json, this might look
 }
 
 // Parse command-line arguments and run the proxy
-parseCommandLineArgs(process.argv.slice(2), 'Usage: npx tsx proxy.ts <https://server-url> [callback-port] [--debug]')
-  .then(({ serverUrl, callbackPort, headers, transportStrategy, host, debug, staticOAuthClientMetadata, staticOAuthClientInfo }) => {
-    return runProxy(serverUrl, callbackPort, headers, transportStrategy, host, staticOAuthClientMetadata, staticOAuthClientInfo)
-  })
+parseCommandLineArgs(
+  process.argv.slice(2),
+  'Usage: npx tsx proxy.ts <https://server-url> [callback-port] [--debug] [--tool-prefix <prefix>] [--tool-filter <tool1,tool2>]',
+)
+  .then(
+    ({
+      serverUrl,
+      callbackPort,
+      headers,
+      transportStrategy,
+      host,
+      debug,
+      staticOAuthClientMetadata,
+      staticOAuthClientInfo,
+      toolPrefix,
+      toolFilter,
+    }) => {
+      return runProxy(
+        serverUrl,
+        callbackPort,
+        headers,
+        transportStrategy,
+        host,
+        staticOAuthClientMetadata,
+        staticOAuthClientInfo,
+        toolPrefix,
+        toolFilter,
+      )
+    },
+  )
   .catch((error) => {
     log('Fatal error:', error)
     process.exit(1)

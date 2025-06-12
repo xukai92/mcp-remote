@@ -84,7 +84,83 @@ export function log(str: string, ...rest: unknown[]) {
  * Creates a bidirectional proxy between two transports
  * @param params The transport connections to proxy between
  */
-export function mcpProxy({ transportToClient, transportToServer }: { transportToClient: Transport; transportToServer: Transport }) {
+/**
+ * Transform tool names by adding a prefix
+ */
+function transformToolName(toolName: string, prefix?: string): string {
+  if (!prefix) return toolName
+  return `${prefix}_${toolName}`
+}
+
+/**
+ * Reverse transform tool names by removing a prefix
+ */
+function reverseTransformToolName(toolName: string, prefix?: string): string {
+  if (!prefix) return toolName
+  if (toolName.startsWith(`${prefix}_`)) {
+    return toolName.substring(prefix.length + 1)
+  }
+  return toolName
+}
+
+/**
+ * Filter tools based on allowed list
+ */
+function filterTools(tools: any[], allowedTools?: string[]): any[] {
+  if (!allowedTools) return tools
+  return tools.filter((tool) => allowedTools.includes(tool.name))
+}
+
+/**
+ * Transform tools/list response to apply prefix and filtering
+ */
+function transformToolsListResponse(result: any, toolPrefix?: string, toolFilter?: string[]): any {
+  if (!result || !result.tools) return result
+
+  let transformedTools = [...result.tools]
+
+  // Apply filtering first (based on original names)
+  if (toolFilter) {
+    transformedTools = filterTools(transformedTools, toolFilter)
+  }
+
+  // Apply prefix transformation
+  if (toolPrefix) {
+    transformedTools = transformedTools.map((tool) => ({
+      ...tool,
+      name: transformToolName(tool.name, toolPrefix),
+    }))
+  }
+
+  return {
+    ...result,
+    tools: transformedTools,
+  }
+}
+
+/**
+ * Transform tools/call request to remove prefix
+ */
+function transformToolCallRequest(params: any, toolPrefix?: string): any {
+  if (!params || !params.name || !toolPrefix) return params
+
+  return {
+    ...params,
+    name: reverseTransformToolName(params.name, toolPrefix),
+  }
+}
+
+export function mcpProxy({
+  transportToClient,
+  transportToServer,
+  toolPrefix,
+  toolFilter,
+}: {
+  transportToClient: Transport
+  transportToServer: Transport
+  toolPrefix?: string
+  toolFilter?: string[]
+}) {
   let transportToClientClosed = false
   let transportToServerClosed = false
 
@@ -101,6 +177,7 @@ export function mcpProxy({ transportToClient, transportToServer }: { transportTo
       })
     }
 
+    // Handle initialize message
     if (message.method === 'initialize') {
       const { clientInfo } = message.params
       if (clientInfo) clientInfo.name = `${clientInfo.name} (via mcp-remote ${MCP_REMOTE_VERSION})`
@@ -108,6 +185,15 @@ export function mcpProxy({ transportToClient, transportToServer }: { transportTo
 
       if (DEBUG) {
         debugLog('Initialize message with modified client info', { clientInfo })
+      }
+    }
+
+    // Handle tools/call message - transform tool name to remove prefix
+    if (message.method === 'tools/call' && toolPrefix) {
+      const originalParams = message.params
+      message.params = transformToolCallRequest(message.params, toolPrefix)
+      if (DEBUG) {
+        debugLog('Transformed tools/call request', { originalParams, transformedParams: message.params })
       }
     }
 
@@ -126,6 +212,20 @@ export function mcpProxy({ transportToClient, transportToServer }: { transportTo
         result: message.result ? 'result-present' : undefined,
         error: message.error,
       })
+    }
+
+    // Handle tools/list response - transform tool names and apply filtering
+    if (message.result && message.result.tools && (toolPrefix || toolFilter)) {
+      const originalResult = { ...message.result }
+      message.result = transformToolsListResponse(message.result, toolPrefix, toolFilter)
+      if (DEBUG) {
+        debugLog('Transformed tools/list response', {
+          originalCount: originalResult.tools?.length || 0,
+          transformedCount: message.result.tools?.length || 0,
+          toolPrefix,
+          toolFilter,
+        })
+      }
     }
 
     transportToClient.send(message).catch(onClientError)
@@ -673,7 +773,37 @@ export async function parseCommandLineArgs(args: string[], usage: string) {
     })
   }
 
-  return { serverUrl, callbackPort, headers, transportStrategy, host, debug, staticOAuthClientMetadata, staticOAuthClientInfo }
+  // Parse tool prefix option
+  let toolPrefix: string | undefined
+  const toolPrefixIndex = args.indexOf('--tool-prefix')
+  if (toolPrefixIndex !== -1 && toolPrefixIndex < args.length - 1) {
+    toolPrefix = args[toolPrefixIndex + 1]
+    log(`Using tool prefix: ${toolPrefix}`)
+  }
+
+  // Parse tool filter option (comma-separated list of allowed tools)
+  let toolFilter: string[] | undefined
+  const toolFilterIndex = args.indexOf('--tool-filter')
+  if (toolFilterIndex !== -1 && toolFilterIndex < args.length - 1) {
+    toolFilter = args[toolFilterIndex + 1]
+      .split(',')
+      .map((t) => t.trim())
+      .filter((t) => t.length > 0)
+    log(`Using tool filter: ${toolFilter.join(', ')}`)
+  }
+
+  return {
+    serverUrl,
+    callbackPort,
+    headers,
+    transportStrategy,
+    host,
+    debug,
+    staticOAuthClientMetadata,
+    staticOAuthClientInfo,
+    toolPrefix,
+    toolFilter,
+  }
 }
 
 /**

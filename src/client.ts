@@ -36,6 +36,8 @@ async function runClient(
   host: string,
   staticOAuthClientMetadata: StaticOAuthClientMetadata,
   staticOAuthClientInfo: StaticOAuthClientInformationFull,
+  toolPrefix?: string,
+  toolFilter?: string[],
 ) {
   // Set up event emitter for auth flow
   const events = new EventEmitter()
@@ -158,10 +160,35 @@ async function runClient(
 }
 
 // Parse command-line arguments and run the client
-parseCommandLineArgs(process.argv.slice(2), 'Usage: npx tsx client.ts <https://server-url> [callback-port] [--debug]')
-  .then(({ serverUrl, callbackPort, headers, transportStrategy, host, staticOAuthClientMetadata, staticOAuthClientInfo }) => {
-    return runClient(serverUrl, callbackPort, headers, transportStrategy, host, staticOAuthClientMetadata, staticOAuthClientInfo)
-  })
+parseCommandLineArgs(
+  process.argv.slice(2),
+  'Usage: npx tsx client.ts <https://server-url> [callback-port] [--debug] [--tool-prefix <prefix>] [--tool-filter <tool1,tool2>]',
+)
+  .then(
+    ({
+      serverUrl,
+      callbackPort,
+      headers,
+      transportStrategy,
+      host,
+      staticOAuthClientMetadata,
+      staticOAuthClientInfo,
+      toolPrefix,
+      toolFilter,
+    }) => {
+      return runClient(
+        serverUrl,
+        callbackPort,
+        headers,
+        transportStrategy,
+        host,
+        staticOAuthClientMetadata,
+        staticOAuthClientInfo,
+        toolPrefix,
+        toolFilter,
+      )
+    },
+  )
   .catch((error) => {
     console.error('Fatal error:', error)
     process.exit(1)
